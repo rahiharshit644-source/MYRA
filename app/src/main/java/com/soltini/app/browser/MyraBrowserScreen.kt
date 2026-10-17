@@ -1096,6 +1096,9 @@ fun MyraBrowserScreen(
     if (showAddShortcutDialog) {
         var newName by remember { mutableStateOf("") }
         var newUrl by remember { mutableStateOf("") }
+        // Read theme colours here (composable scope); onClick below is not composable.
+        val shortcutAccent = LocalMyraTokens.current.accent
+        val shortcutAccent2 = LocalMyraTokens.current.accentSecondary
 
         AlertDialog(
             onDismissRequest = { showAddShortcutDialog = false },
@@ -1144,7 +1147,7 @@ fun MyraBrowserScreen(
                                     name = newName,
                                     url = fullUrl,
                                     iconLabel = initial,
-                                    gradient = listOf(LocalMyraTokens.current.accent, LocalMyraTokens.current.accentSecondary)
+                                    gradient = listOf(shortcutAccent, shortcutAccent2)
                                 )
                             )
                             showAddShortcutDialog = false

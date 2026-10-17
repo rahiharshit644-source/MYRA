@@ -49,3 +49,8 @@ Colours were sampled from the reference image: primary #2C7FFC, mic ring #35B6FD
 background #BFE1FC -> #E7F5FD with soft cloud glows (ui/theme/MyraBackground.kt), frosted white cards with bright white edge.
 Blue Glass bottom bar now matches the reference (icon over label, white bubble on selected, big glowing mic). Glossy blue avatar orb in Home + Chat.
 Switches are blue/white-thumb in Blue Glass; Classic switch colours unchanged.
+
+## v3: fixes from your CI build log (3 compile errors)
+- MyraOrbState.kt: enum needed ';' before the colorFor() function.
+- MyraBrowserScreen.kt: theme colours were read inside an onClick lambda; now read once in composable scope.
+- VoiceScreen.kt: theme mode was read inside LazyColumn content; now hoisted to a val.

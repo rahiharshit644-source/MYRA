@@ -19,7 +19,7 @@ enum class MyraOrbState(val js: String, val chipLabel: String, val color: Color)
     LISTENING("listening", "Listening", Color(0xFF16A9DC)),
     SPEAKING("speaking", "Speaking", Color(0xFFE0489E)),
     MUTED("muted", "Muted", Color(0xFFE59524)),
-    PAUSED("paused", "Paused", Color(0xFF7C8AAE))
+    PAUSED("paused", "Paused", Color(0xFF7C8AAE));
 
     /** Halo / chip colour for the active theme. Classic returns the original [color] unchanged. */
     fun colorFor(mode: MyraThemeMode): Color =

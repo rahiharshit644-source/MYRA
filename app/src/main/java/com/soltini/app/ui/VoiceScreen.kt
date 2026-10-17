@@ -113,6 +113,7 @@ fun VoiceScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isBlueGlass = LocalMyraTokens.current.mode == MyraThemeMode.BLUE_GLASS // read here: LazyColumn content isn't composable
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
@@ -205,7 +206,7 @@ fun VoiceScreen(
             }
 
             // Blue Glass home dashboard: shortcut cards to existing destinations (Classic keeps its own nav)
-            if (LocalMyraTokens.current.mode == MyraThemeMode.BLUE_GLASS) {
+            if (isBlueGlass) {
                 item {
                     HomeShortcutCards(
                         onOpenBrowser = onOpenBrowser,
