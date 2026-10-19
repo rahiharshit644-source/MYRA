@@ -120,7 +120,6 @@ class CallNotificationManager private constructor(private val context: Context) 
     private var lastAnnouncedCaller: String? = null
     private var lastAnnouncedTime: Long = 0L
 
-    private val ttsSpeaker = TtsSpeaker(context)
     private var telephonyCallback: Any? = null
     private var isListening = false
 
@@ -459,12 +458,6 @@ class CallNotificationManager private constructor(private val context: Context) 
                 !callerName.equals("Incoming Call", ignoreCase = true) &&
                 callerName != phoneNumber
 
-        val announcement = if (isKnownContact) {
-            "Boss, $callerName ka call aa raha hai."
-        } else {
-            "Boss, unknown number se call aa raha hai."
-        }
-
         Log.i(TAG, "🚨 INCOMING CALL DETECTED: Caller='$callerName', Phone='$phoneNumber', Known=$isKnownContact")
 
         // Dispatch to listener (BackgroundVoiceService -> Gemini Live WebSocket)
@@ -472,8 +465,8 @@ class CallNotificationManager private constructor(private val context: Context) 
         if (listener != null) {
             listener.invoke(callerName, phoneNumber)
         } else {
-            // Fallback announcement via TTS directly
-            speakViaTts("$announcement Uthana hai ya cut karna hai?")
+            // No robotic offline TTS: Myra only speaks through Gemini Live (online).
+            Log.i(TAG, "No live listener attached; staying silent for incoming call")
         }
     }
 
@@ -493,10 +486,6 @@ class CallNotificationManager private constructor(private val context: Context) 
         rejectPendingIntent = null
         lastAnnouncedCaller = null
         Log.i(TAG, "Call ended / IDLE")
-    }
-
-    fun speakViaTts(text: String) {
-        ttsSpeaker.speak(text)
     }
 
     /**
@@ -877,6 +866,5 @@ class CallNotificationManager private constructor(private val context: Context) 
 
     fun shutdown() {
         stopListening()
-        ttsSpeaker.shutdown()
     }
 }

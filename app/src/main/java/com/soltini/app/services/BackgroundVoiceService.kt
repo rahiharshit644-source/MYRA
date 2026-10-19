@@ -403,23 +403,12 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
         callNotificationManager.onIncomingCallDetected = { callerName, phoneNumber ->
             Log.i(TAG, "Incoming call detected in BackgroundVoiceService: $callerName ($phoneNumber)")
             if (!_isSleeping.value && geminiLiveManager.connectionState.value == ConnectionState.Live) {
-                val callPrompt = """[URGENT INCOMING PHONE CALL]
-Caller: "$callerName" (${phoneNumber ?: "Unknown number"}).
-Boss ke phone par call aa raha hai!
-Turant Boss ko bolo:
-"Boss, $callerName ka call aa raha hai, aap bataiye kya karna hai — uthana hai ya reject karna hai?"
-Aur Boss jo bolein:
-- Agar Boss bolein "utha lo", "answer karo", "haan receive karo", "phone uthao": execute tool `answer_call`.
-- Agar Boss bolein "kaat do", "reject karo", "mat uthao", "phone kaat de": execute tool `reject_call`.
-Speak now immediately!"""
-                geminiLiveManager.sendClientContent(callPrompt)
-            } else {
-                callNotificationManager.speakViaTts("Boss, $callerName ka call aa raha hai, aap bataiye kya karna hai?")
-                if (_isSleeping.value) {
-                    wakeUp()
-                } else if (geminiLiveManager.connectionState.value != ConnectionState.Live) {
-                    connect()
-                }
+                geminiLiveManager.sendClientContent(buildIncomingCallPrompt(callerName, phoneNumber))
+            } else if (isNetworkOnline()) {
+                // Online but not live yet: wake / connect and announce the moment Gemini is Live.
+                // Offline: stay completely silent (no robotic TTS).
+                pendingCallAnnouncement = callerName to phoneNumber
+                if (_isSleeping.value) wakeUp() else connect()
             }
         }
 
@@ -451,6 +440,17 @@ Speak now immediately!"""
                             headsetRouter?.start()
                         }
                         OverlayService.getInstance()?.setRingState(com.soltini.app.overlay.RingState.LISTENING)
+                        pendingCallAnnouncement?.let { (name, number) ->
+                            pendingCallAnnouncement = null
+                            if (callNotificationManager.isRinging) {
+                                serviceScope.launch {
+                                    delay(300) // let the session finish its setup handshake
+                                    if (connectionState.value == ConnectionState.Live && callNotificationManager.isRinging) {
+                                        geminiLiveManager.sendClientContent(buildIncomingCallPrompt(name, number))
+                                    }
+                                }
+                            }
+                        }
                         if (wakeGreetingPending) {
                             wakeGreetingPending = false
                             serviceScope.launch {
@@ -516,6 +516,7 @@ Speak now immediately!"""
                 connect()
             }
         }
+        registerNetworkReconnect()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -683,8 +684,64 @@ Speak now immediately!"""
             Log.i(TAG, "connect() ignored because service is paused.")
             return
         }
+        // The mic permission may have been granted after this service started (first-run setup).
+        // Re-check here so the session never waits for an app restart.
+        if (!_hasMicPermission.value && androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            onPermissionResult(true)
+        }
         _isSleeping.value = false
         geminiLiveManager.connect()
+    }
+
+    @Volatile private var pendingCallAnnouncement: Pair<String, String?>? = null
+
+    private fun buildIncomingCallPrompt(callerName: String, phoneNumber: String?): String =
+        """[URGENT INCOMING PHONE CALL]
+Caller: "$callerName" (${phoneNumber ?: "Unknown number"}).
+Boss ke phone par call aa raha hai!
+Turant Boss ko bolo:
+"Boss, $callerName ka call aa raha hai, aap bataiye kya karna hai — uthana hai ya reject karna hai?"
+Aur Boss jo bolein:
+- Agar Boss bolein "utha lo", "answer karo", "haan receive karo", "phone uthao": execute tool `answer_call`.
+- Agar Boss bolein "kaat do", "reject karo", "mat uthao", "phone kaat de": execute tool `reject_call`.
+Speak now immediately!"""
+
+    private fun isNetworkOnline(): Boolean = try {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } catch (_: Exception) {
+        true // unknown -> assume online, never block the connection
+    }
+
+    private var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
+
+    /** Reconnect the moment internet returns instead of waiting for backoff / the 4-minute watchdog. */
+    private fun registerNetworkReconnect() {
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val cb = object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    serviceScope.launch {
+                        val st = connectionState.value
+                        if (_hasMicPermission.value && !_isSleeping.value && !isPaused.value &&
+                            (st == ConnectionState.Disconnected || st == ConnectionState.Reconnecting)
+                        ) {
+                            Log.i(TAG, "Network available again: reconnecting Gemini Live")
+                            connect()
+                        }
+                    }
+                }
+            }
+            cm.registerDefaultNetworkCallback(cb)
+            networkCallback = cb
+        } catch (e: Exception) {
+            Log.w(TAG, "Network callback registration failed: ${e.message}")
+        }
     }
 
     /**
@@ -703,7 +760,7 @@ Speak now immediately!"""
         geminiLiveManager.disconnect()
         // Small gap to let WebSocket close cleanly before re-opening
         serviceScope.launch {
-            kotlinx.coroutines.delay(500)
+            kotlinx.coroutines.delay(150)
             connect()
         }
     }
@@ -1897,6 +1954,11 @@ Speak now immediately!"""
         audioRecorder.stopRecording()
         audioPlayer.stop()
         geminiLiveManager.disconnect()
+        try {
+            networkCallback?.let {
+                (getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).unregisterNetworkCallback(it)
+            }
+        } catch (_: Exception) {}
         try {
             com.soltini.app.telephony.CallNotificationManager.getInstance(this).shutdown()
         } catch (_: Exception) {}

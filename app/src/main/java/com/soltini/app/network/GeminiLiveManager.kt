@@ -17,7 +17,10 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +75,8 @@ class GeminiLiveManager(
     companion object {
         private const val TAG = "GeminiLiveManager"
         private const val MODEL_STRING = "gemini-3.1-flash-live-preview"
+        /** Max time the setup message waits for the memory block; the socket handshake runs in parallel. */
+        private const val MEMORY_WAIT_MS = 1200L
         private const val WS_BASE_URL =
             "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     }
@@ -126,30 +131,29 @@ class GeminiLiveManager(
 
         val url = "$WS_BASE_URL?key=$apiKey"
 
-        // Pre-fetch memories on IO BEFORE opening the WebSocket so the onOpen callback
-        // can call sendSetupMessage() without any blocking call.
-        managerScope.launch {
-            cachedMemoryBlock = try {
-                // Query with the actual last thing the user said, not a generic
-                // placeholder — otherwise relevance-matching never surfaces
-                // anything specific to what's actually being talked about.
-                // retrieveContext() always includes recent persisted session-log
-                // entries regardless of this query, so "what did we talk about
-                // last time" still works even when there's no prior transcript.
-                val lastUserUtterance = memory2Engine?.db?.getAllConversationEntries(30)
-                    ?.lastOrNull { it.sender == "USER" }?.text
-                val query = lastUserUtterance?.takeIf { it.isNotBlank() }
-                    ?: "user personal preferences and recent conversation topics"
-                val mem2Block = memory2Engine?.retrieveContext(query)?.formattedPromptBlock ?: ""
-                val pluginCount = pluginRegistry?.getAllPlugins()?.size ?: 20
-                val recallBlock = com.soltini.app.memory2.ConversationArchive.get()?.buildRecallBlock() ?: ""
-                "$mem2Block$recallBlock\n\n### CAPABILITY DIRECTORY (ORCHESTRATOR & PLUGIN REGISTRY):\nActive capabilities registered: $pluginCount tools & agents, plus 1,756+ public APIs across 51 categories.\n"
-            } catch (e: Exception) {
-                AppLogger.w(TAG, "Memory pre-fetch failed (non-fatal): ${e.message}")
-                ""
-            }
-            openWebSocket(url)
-        }
+        // Memory pre-fetch and the WebSocket handshake now run IN PARALLEL (before, the socket
+        // was only opened after memory finished, which added seconds to every connect).
+        // onOpen waits at most MEMORY_WAIT_MS for the block, falling back to the previous one.
+        pendingMemory = managerScope.async { buildMemoryBlock() }
+        managerScope.launch { openWebSocket(url) }
+    }
+
+    @Volatile private var pendingMemory: Deferred<String>? = null
+
+    private suspend fun buildMemoryBlock(): String = try {
+        // Query with the actual last thing the user said so relevance-matching surfaces
+        // something specific. retrieveContext() always includes recent session-log entries.
+        val lastUserUtterance = memory2Engine?.db?.getAllConversationEntries(30)
+            ?.lastOrNull { it.sender == "USER" }?.text
+        val query = lastUserUtterance?.takeIf { it.isNotBlank() }
+            ?: "user personal preferences and recent conversation topics"
+        val mem2Block = memory2Engine?.retrieveContext(query)?.formattedPromptBlock ?: ""
+        val pluginCount = pluginRegistry?.getAllPlugins()?.size ?: 20
+        val recallBlock = com.soltini.app.memory2.ConversationArchive.get()?.buildRecallBlock() ?: ""
+        "$mem2Block$recallBlock\n\n### CAPABILITY DIRECTORY (ORCHESTRATOR & PLUGIN REGISTRY):\nActive capabilities registered: $pluginCount tools & agents, plus 1,756+ public APIs across 51 categories.\n"
+    } catch (e: Exception) {
+        AppLogger.w(TAG, "Memory pre-fetch failed (non-fatal): ${e.message}")
+        cachedMemoryBlock
     }
 
     private var reconnectAttempts = 0
@@ -177,7 +181,7 @@ class GeminiLiveManager(
 
         client = OkHttpClient.Builder()
             .readTimeout(0, TimeUnit.MILLISECONDS)
-            .connectTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
             .pingInterval(45, TimeUnit.SECONDS)
             .build()
@@ -196,8 +200,12 @@ class GeminiLiveManager(
                 _errorMessage.value = null
                 audioChunksSentCount = 0
 
-                // Step 1: Send setup message immediately after onOpen
-                sendSetupMessage(webSocket)
+                // Step 1: send setup as soon as memory is ready (bounded wait, parallel with handshake)
+                managerScope.launch {
+                    withTimeoutOrNull(MEMORY_WAIT_MS) { pendingMemory?.await() }
+                        ?.let { cachedMemoryBlock = it }
+                    sendSetupMessage(webSocket)
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -1918,7 +1926,7 @@ TASK PERSISTENCE & PRIORITY:
                 return@launch
             }
             _connectionState.value = ConnectionState.Reconnecting
-            val backoffMs = (1500L * reconnectAttempts).coerceIn(1500L, 6000L)
+            val backoffMs = (600L * reconnectAttempts).coerceIn(600L, 5000L)
             AppLogger.i(TAG, "Auto-reconnecting in ${backoffMs}ms (attempt $reconnectAttempts/$MAX_RECONNECT_ATTEMPTS)...")
             delay(backoffMs)
             if (shouldAutoReconnect) {

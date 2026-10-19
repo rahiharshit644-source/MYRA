@@ -102,6 +102,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
             val binder = service as BackgroundVoiceService.LocalBinder
             voiceService = binder.getService()
+            // Keep the service's mic flag in sync with the real OS permission (it may have been
+            // granted after the service started, e.g. during first-run setup).
+            voiceService?.let { svc ->
+                val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                    getApplication(), android.Manifest.permission.RECORD_AUDIO
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (granted && !svc.hasMicPermission.value) svc.onPermissionResult(true)
+            }
             observeService()
             // Safety net: if START_STICKY restarted the service but the WebSocket is not
             // yet alive (e.g. still Disconnected after the auto-connect in onCreate),

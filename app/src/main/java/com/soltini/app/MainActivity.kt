@@ -66,7 +66,8 @@ import com.soltini.app.overlay.OverlayService
 import com.soltini.app.ui.LogScreen
 import com.soltini.app.ui.MainViewModel
 import com.soltini.app.ui.MiuiOnboardingScreen
-import com.soltini.app.ui.PermissionsScreen
+import com.soltini.app.ui.SetupWizardScreen
+import com.soltini.app.ui.isSetupNeeded
 import com.soltini.app.ui.PublicApisHubScreen
 import com.soltini.app.ui.SettingsScreen
 import com.soltini.app.ui.VoiceScreen
@@ -77,7 +78,7 @@ import com.soltini.app.ui.theme.*
  * MainActivity
  *
  * Routing logic:
- *   1. "permissions" — First launch: only asks for Microphone (required to start).
+ *   1. "permissions" — First launch wizard: microphone, call permissions, Gemini API key.
  *   2. "voice"       — Main screen with floating iridescent glass orb.
  *   3. "apis_hub"    — 1,750+ Public APIs Hub & Live Playground.
  *   4. "settings"    — Full permissions dashboard (overlay, accessibility, assistant role…).
@@ -182,7 +183,7 @@ class MainActivity : ComponentActivity() {
                 var currentScreen by remember {
                     mutableStateOf(
                         when {
-                            !hasMic -> "permissions"
+                            !hasMic || isSetupNeeded(this@MainActivity) -> "permissions"
                             isMiuiOnboardingNeeded(this@MainActivity) -> "miui_onboarding"
                             else -> "voice"
                         }
@@ -278,8 +279,11 @@ class MainActivity : ComponentActivity() {
                             ) { targetScreen ->
                                 when (targetScreen) {
                                     "permissions" -> {
-                                        PermissionsScreen(
-                                            onAllPermissionsGranted = {
+                                        SetupWizardScreen(
+                                            onMicGranted = { viewModel.onPermissionResult(true) },
+                                            onFinished = { keyChanged ->
+                                                // Start (or restart with the new key) the live session right away.
+                                                if (keyChanged) viewModel.reconnect() else viewModel.connect()
                                                 currentScreen = if (isMiuiOnboardingNeeded(this@MainActivity)) {
                                                     "miui_onboarding"
                                                 } else {
