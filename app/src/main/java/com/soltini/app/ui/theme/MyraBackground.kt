@@ -24,9 +24,10 @@ fun Modifier.myraBackground(): Modifier {
             val h = size.height
             fun glow(c: Color, cx: Float, cy: Float, r: Float) =
                 drawRect(Brush.radialGradient(listOf(c, Color.Transparent), center = Offset(w * cx, h * cy), radius = r))
-            glow(Color(0x886DE0FD), 0.10f, 0.02f, w * 0.85f)   // cyan glow, top-left
-            glow(Color(0xB3FFFFFF), 0.92f, 0.30f, w * 0.75f)   // white wisp, right
-            glow(Color(0x99FFFFFF), 0.15f, 0.62f, w * 0.80f)   // white wisp, lower-left
-            glow(Color(0x66A8D8FF), 0.85f, 0.95f, w * 0.80f)   // soft blue, bottom-right
+            glow(Color(0x9900E5FF), 0.12f, 0.04f, w * 0.90f)   // vivid electric cyan flare, top-left
+            glow(Color(0xD9FFFFFF), 0.88f, 0.22f, w * 0.80f)   // pure diamond white wisp, right
+            glow(Color(0xB3FFFFFF), 0.18f, 0.58f, w * 0.85f)   // soft white glass refraction, mid-left
+            glow(Color(0x882563EB), 0.88f, 0.92f, w * 0.90f)   // rich royal sapphire glow, bottom-right
+            glow(Color(0x5538BDF8), 0.50f, 0.98f, w * 0.70f)   // sky blue grounding mist, bottom-center
         }
 }

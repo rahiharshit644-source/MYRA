@@ -719,6 +719,16 @@ private fun BlueGlassNavBar(
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                             maxLines = 1
                         )
+                        if (selected && t.mode == com.soltini.app.ui.theme.MyraThemeMode.BLUE_GLASS) {
+                            Spacer(Modifier.height(2.dp))
+                            Box(
+                                modifier = Modifier
+                                    .width(14.dp)
+                                    .height(2.5.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                                    .background(Color(0xFF00E5FF))
+                            )
+                        }
                     }
                 }
             }

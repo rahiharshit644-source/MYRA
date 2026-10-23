@@ -14,6 +14,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Icon
@@ -113,6 +115,7 @@ fun VoiceScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val appSettings = remember { com.soltini.app.settings.AppSettings(context) }
     val isBlueGlass = LocalMyraTokens.current.mode == MyraThemeMode.BLUE_GLASS // read here: LazyColumn content isn't composable
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
@@ -129,7 +132,7 @@ fun VoiceScreen(
     val isPaused = isLitePaused || isHardPaused
 
     LaunchedEffect(hasMicPermission, connectionState, isPaused) {
-        if (hasMicPermission && !isPaused && (connectionState == ConnectionState.Disconnected || connectionState == ConnectionState.Error)) {
+        if (hasMicPermission && !isPaused && !appSettings.isBedtimeQuietHoursActive() && (connectionState == ConnectionState.Disconnected || connectionState == ConnectionState.Error)) {
             viewModel.connect()
         }
     }
@@ -145,14 +148,14 @@ fun VoiceScreen(
         }
     }
 
-    var hasAssistant by remember { mutableStateOf(checkAssistantRoleHome(context)) }
-    var hasAccessibility by remember { mutableStateOf(checkAccessibilityHome(context)) }
-    var hasBattery by remember { mutableStateOf(checkBatteryHome(context)) }
+    var hasAssistant by remember { mutableStateOf(com.soltini.app.ui.settings.SettingsPermChecks.checkAssistantRole(context)) }
+    var hasAccessibility by remember { mutableStateOf(com.soltini.app.ui.settings.SettingsPermChecks.checkAccessibility(context)) }
+    var hasBattery by remember { mutableStateOf(com.soltini.app.ui.settings.SettingsPermChecks.checkBattery(context)) }
 
     LifecycleResumeEffect(Unit) {
-        hasAssistant = checkAssistantRoleHome(context)
-        hasAccessibility = checkAccessibilityHome(context)
-        hasBattery = checkBatteryHome(context)
+        hasAssistant = com.soltini.app.ui.settings.SettingsPermChecks.checkAssistantRole(context)
+        hasAccessibility = com.soltini.app.ui.settings.SettingsPermChecks.checkAccessibility(context)
+        hasBattery = com.soltini.app.ui.settings.SettingsPermChecks.checkBattery(context)
         onPauseOrDispose {}
     }
 
@@ -174,7 +177,6 @@ fun VoiceScreen(
         ) {
             // Top bar
             item {
-                val appSettings = remember { com.soltini.app.settings.AppSettings(context) }
                 TopBar(
                     connectionState = connectionState,
                     appName = appSettings.appDisplayName,
@@ -654,12 +656,31 @@ private fun HeroOrbGlassCard(
                     activeBg = orbState.colorFor(LocalMyraTokens.current.mode).copy(alpha = 0.14f),
                     activeContent = orbState.colorFor(LocalMyraTokens.current.mode)
                 )
-                Text(
-                    text = "Floating Orb Ready",
-                    color = LocalMyraTokens.current.textSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                if (LocalMyraTokens.current.mode == MyraThemeMode.BLUE_GLASS) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (isLive) Color(0xFF00E5FF) else Color(0xFF94A3B8))
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = if (isLive) "J.A.R.V.I.S. HUD" else "STANDBY",
+                            color = LocalMyraTokens.current.textSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Floating Orb Ready",
+                        color = LocalMyraTokens.current.textSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -672,6 +693,63 @@ private fun HeroOrbGlassCard(
                     .fillMaxWidth()
                     .height(250.dp)
             )
+
+            if (LocalMyraTokens.current.mode == MyraThemeMode.BLUE_GLASS) {
+                Spacer(modifier = Modifier.height(10.dp))
+                androidx.compose.material3.Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0x1800E5FF),
+                    border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.28f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = Color(0xFF00E5FF),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "CORE: ${if (isSpeaking) "SYNTHESIZING" else if (isLive) "ACTIVE HUD" else "STANDBY"}",
+                                color = Color(0xFF0369A1),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp
+                            )
+                        }
+                        Text(
+                            text = "EDITH PROTOCOL v2.4",
+                            color = Color(0xFF1E6FFB),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isLive) Color(0xFF00F5D4) else Color(0xFF94A3B8))
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (isLive) "LINKED" else "OFFLINE",
+                                color = Color(0xFF0369A1),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -1111,14 +1189,17 @@ fun DualPauseModeCard(
 ) {
     val isAnyPaused = isLitePaused || isHardPaused
 
+    val isBlue = LocalMyraTokens.current.mode == MyraThemeMode.BLUE_GLASS
     val badgeBg = when {
         isHardPaused -> Color(0xFFFDE8E8)
         isLitePaused -> BadgeYellowBg
+        isBlue -> Color(0xFFE0F2FE)
         else -> BadgePurpleBg
     }
     val badgeTint = when {
         isHardPaused -> RedError
         isLitePaused -> BadgeYellowTint
+        isBlue -> Color(0xFF0284C7)
         else -> BadgePurpleTint
     }
 
@@ -1255,31 +1336,9 @@ fun DualPauseModeCard(
     }
 }
 
-// ── Permission check helpers for home ─────────────────────────────────────────
-private fun checkAssistantRoleHome(context: Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val rm = context.getSystemService(Context.ROLE_SERVICE) as RoleManager
-        rm.isRoleHeld(RoleManager.ROLE_ASSISTANT)
-    } else false
-}
-
-private fun checkBatteryHome(context: Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-        pm.isIgnoringBatteryOptimizations(context.packageName)
-    } else true
-}
-
-private fun checkAccessibilityHome(context: Context): Boolean {
-    val enabled = android.provider.Settings.Secure.getString(
-        context.contentResolver,
-        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-    ) ?: return false
-    return enabled.contains(context.packageName, ignoreCase = true)
-}
 
 
-// ── Blue Glass home shortcuts (real destinations only) ─────────────────────────
+// ── Blue Glass home shortcuts (Tactical Command Modules) ─────────────────────────
 @Composable
 private fun HomeShortcutCards(
     onOpenBrowser: () -> Unit,
@@ -1290,34 +1349,141 @@ private fun HomeShortcutCards(
     onOpenMemory: () -> Unit
 ) {
     val t = LocalMyraTokens.current
-    val items = listOf(
-        Triple("Browser", "Myra Browser", Icons.Default.Language) to onOpenBrowser,
-        Triple("Smart Home", "ESP32 devices", Icons.Default.ElectricBolt) to onOpenHomeAutomation,
-        Triple("APIs Hub", "Public APIs", Icons.Default.Public) to onOpenApisHub,
-        Triple("Weather", "Live forecast", Icons.Default.Cloud) to onOpenWeather,
-        Triple("Memory", "Recall & organize", Icons.Default.Psychology) to onOpenMemory,
-        Triple("Logs", "Activity & errors", Icons.AutoMirrored.Filled.Article) to onOpenLogs
+
+    data class ShortcutSpec(
+        val title: String,
+        val subtitle: String,
+        val icon: ImageVector,
+        val iconGradient: Brush,
+        val action: () -> Unit
     )
+
+    val items = listOf(
+        ShortcutSpec(
+            title = "Myra Browser",
+            subtitle = "Headless & Web",
+            icon = Icons.Default.Language,
+            iconGradient = Brush.linearGradient(listOf(Color(0xFF00E5FF), Color(0xFF0077B6))),
+            action = onOpenBrowser
+        ),
+        ShortcutSpec(
+            title = "Smart Home",
+            subtitle = "ESP32 Relays",
+            icon = Icons.Default.ElectricBolt,
+            iconGradient = Brush.linearGradient(listOf(Color(0xFF00F5D4), Color(0xFF058C68))),
+            action = onOpenHomeAutomation
+        ),
+        ShortcutSpec(
+            title = "APIs Directory",
+            subtitle = "1,756+ Global APIs",
+            icon = Icons.Default.Public,
+            iconGradient = Brush.linearGradient(listOf(Color(0xFF7000FF), Color(0xFF3A86FF))),
+            action = onOpenApisHub
+        ),
+        ShortcutSpec(
+            title = "Live Weather",
+            subtitle = "Radar & Forecast",
+            icon = Icons.Default.Cloud,
+            iconGradient = Brush.linearGradient(listOf(Color(0xFF38BDF8), Color(0xFF0284C7))),
+            action = onOpenWeather
+        ),
+        ShortcutSpec(
+            title = "Memory Vault",
+            subtitle = "Facts & Insights",
+            icon = Icons.Default.Psychology,
+            iconGradient = Brush.linearGradient(listOf(Color(0xFFA855F7), Color(0xFF6366F1))),
+            action = onOpenMemory
+        ),
+        ShortcutSpec(
+            title = "System Logs",
+            subtitle = "Live Execution",
+            icon = Icons.AutoMirrored.Filled.Article,
+            iconGradient = Brush.linearGradient(listOf(Color(0xFFFB923C), Color(0xFFDC2626))),
+            action = onOpenLogs
+        )
+    )
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Tactical header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF00E5FF))
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "COMMAND MODULES",
+                    color = t.textSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.1.sp
+                )
+            }
+            Text(
+                text = "JARVIS CORE 2.0",
+                color = Color(0xFF1E6FFB),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
         items.chunked(2).forEach { rowItems ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                rowItems.forEach { (info, action) ->
+                rowItems.forEach { spec ->
                     GlassCard(
                         modifier = Modifier.weight(1f),
-                        onClick = action,
-                        contentPadding = 14.dp
+                        onClick = spec.action,
+                        cornerRadius = 20.dp,
+                        contentPadding = PaddingValues(14.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Box(
-                                modifier = Modifier.size(36.dp).clip(CircleShape).background(t.accentGradient),
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .shadow(
+                                        elevation = 4.dp,
+                                        shape = RoundedCornerShape(12.dp),
+                                        ambientColor = Color(0xFF00E5FF).copy(alpha = 0.25f),
+                                        spotColor = Color(0xFF1E6FFB).copy(alpha = 0.35f)
+                                    )
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(spec.iconGradient),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(info.third, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                                Icon(
+                                    imageVector = spec.icon,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                             Spacer(Modifier.width(10.dp))
-                            Column {
-                                Text(info.first, color = t.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                Text(info.second, color = t.textSecondary, fontSize = 11.sp, maxLines = 1)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = spec.title,
+                                    color = t.textPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = spec.subtitle,
+                                    color = t.textSecondary,
+                                    fontSize = 10.5.sp,
+                                    maxLines = 1
+                                )
                             }
                         }
                     }

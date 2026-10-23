@@ -119,28 +119,35 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
 
     private val audioPlayer = AudioPlayer()
 
-    // ── Wake word / standby ──────────────────────────────────────────────────
-    private var wakeWordEngine: WakeWordEngine? = null
     private var headsetRouter: HeadsetAudioRouter? = null
-    private var inactivityJob: Job? = null
-    private var standbyWakeLock: PowerManager.WakeLock? = null
-    @Volatile private var wakeGreetingPending = false
-    /** True once a task/action tool ran in the current turn (used by Silent Execution mode). */
-    @Volatile private var silentTurn = false
+    var silentTurn = false
+
     private lateinit var audioRecorder: AudioRecorder
-    private lateinit var geminiLiveManager: GeminiLiveManager
+    lateinit var geminiLiveManager: GeminiLiveManager
+        private set
+
+    lateinit var toolRouter: VoiceToolRouter
+        private set
+    lateinit var sleepStandbyManager: VoiceSleepStandbyManager
+        private set
+    lateinit var pauseModeManager: VoicePauseModeManager
+        private set
+    lateinit var callHandler: VoiceCallHandler
+        private set
 
     // Strict voice focus: mic audio only reaches Gemini when the speaker is Boss (see VoiceGate).
     @Volatile private var voiceGate: com.soltini.app.voiceprint.gate.VoiceGate? = null
     private var lastGateSync = 0L
     private var lastGateReload = 0L
     // Requests Boss gave while a task was still running; run after it finishes (never dropped).
-    private val pendingAutomationRequests = java.util.concurrent.CopyOnWriteArrayList<String>()
-    private lateinit var agentToolExecutor: AgentToolExecutor
-    private val browserUseClient: BrowserUseClient by lazy { BrowserUseClient(this) }
+    val pendingAutomationRequests = java.util.concurrent.CopyOnWriteArrayList<String>()
+    lateinit var agentToolExecutor: AgentToolExecutor
+        private set
+    val browserUseClient: BrowserUseClient by lazy { BrowserUseClient(this) }
     private lateinit var backgroundAgentRunner: com.soltini.app.agent.BackgroundAgentRunner
     private lateinit var agentPhoneController: com.soltini.app.agent.AgentPhoneController
-    private lateinit var deviceController: DeviceController
+    lateinit var deviceController: DeviceController
+        private set
     private lateinit var mqttManager: MqttManager
 
     private val _hasMicPermission = MutableStateFlow(false)
@@ -149,25 +156,10 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
 
-    private val _isSleeping = MutableStateFlow(false)
-    val isSleeping: StateFlow<Boolean> = _isSleeping.asStateFlow()
-
-    /**
-     * Lite Pause — mic/WS off, accessibility service silenced but still listed.
-     * Works for most banking apps. No re-enable needed.
-     */
-    private val _isLitePaused = MutableStateFlow(false)
-    val isLitePaused: StateFlow<Boolean> = _isLitePaused.asStateFlow()
-
-    /**
-     * Hard Pause — mic/WS off + disableSelf() on accessibility service.
-     * For strict banking apps (HDFC, ICICI, etc.). Requires one manual re-enable.
-     */
-    private val _isHardPaused = MutableStateFlow(false)
-    val isHardPaused: StateFlow<Boolean> = _isHardPaused.asStateFlow()
-
-    /** True if either pause mode is active (convenience for UI) */
-    val isPaused: StateFlow<Boolean> get() = _isLitePaused  // kept for compat — see combined below
+    val isSleeping: StateFlow<Boolean> get() = sleepStandbyManager.isSleeping
+    val isLitePaused: StateFlow<Boolean> get() = pauseModeManager.isLitePaused
+    val isHardPaused: StateFlow<Boolean> get() = pauseModeManager.isHardPaused
+    val isPaused: StateFlow<Boolean> get() = pauseModeManager.isLitePaused
 
     private val _transcripts = MutableStateFlow<List<TranscriptEntry>>(emptyList())
     val transcripts: StateFlow<List<TranscriptEntry>> = _transcripts.asStateFlow()
@@ -184,6 +176,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
 
     // Zero-battery MIUI bypass
     private var silentMediaPlayer: MediaPlayer? = null
+    @Volatile var userExplicitlyDisconnected: Boolean = false
 
     inner class LocalBinder : Binder() {
         fun getService(): BackgroundVoiceService = this@BackgroundVoiceService
@@ -191,6 +184,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
 
     override fun onCreate() {
         super.onCreate()
+        appSettings = AppSettings(this)
         // Unfinished task list from before a crash / phone lock? Remind the user (never auto-runs phone actions).
         try {
             com.soltini.app.agent.TaskQueueStore(this).unfinishedSummary(6L * 60 * 60 * 1000)?.let {
@@ -226,7 +220,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
         serviceScope.launch {
             while (isActive) {
                 delay(4 * 60 * 1000L) // renew every 4 minutes before any 10-minute expiry
-                if (!_isSleeping.value && !_isLitePaused.value && !_isHardPaused.value) {
+                if (!isSleeping.value && !isLitePaused.value && !isHardPaused.value) {
                     try {
                         wakeLock?.acquire(10 * 60 * 1000L)
                         Log.d(TAG, "WakeLock refreshed")
@@ -244,15 +238,18 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
 
                     // Keep Gemini Live connection alive if dropped in background
                     if (connectionState.value == ConnectionState.Disconnected && _hasMicPermission.value) {
-                        Log.i(TAG, "Heartbeat: Reconnecting Gemini Live session in background...")
-                        connect()
+                        if (!userExplicitlyDisconnected && appSettings.isAssistantMasterEnabled && !appSettings.isBedtimeQuietHoursActive()) {
+                            Log.i(TAG, "Heartbeat: Reconnecting Gemini Live session in background...")
+                            connect()
+                        } else {
+                            Log.d(TAG, "Heartbeat: Auto-reconnect suppressed (user disconnected or bedtime quiet hours active)")
+                        }
                     }
                 }
             }
         }
 
         // ── User-configurable settings + memory ──────────────────────────────
-        appSettings = AppSettings(this)
         memory2Engine = com.soltini.app.memory2.Memory2Engine.getInstance(this, appSettings)
         pluginRegistry = com.soltini.app.plugins.PluginRegistry.getInstance(this)
 
@@ -260,13 +257,10 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
         com.soltini.app.plugins.BuiltinPluginInitializer.initializeAll(this, pluginRegistry, agentToolExecutor, appSettings)
         myraOrchestrator = com.soltini.app.orchestrator.MyraOrchestrator.getInstance(this, memory2Engine, pluginRegistry, appSettings)
 
-        // Wake word ("Myra") + audio routing + idle-to-standby watcher
-        wakeWordEngine = WakeWordEngine(this, serviceScope) { onWakeWordDetected() }
         headsetRouter = HeadsetAudioRouter(this)
         if (appSettings.isWakeWordEnabled) {
             VoskModelManager.init(this, serviceScope)
         }
-        startInactivityWatcher()
 
         // Background phone agent -> live voice model channel (questions, confirmations, progress)
         com.soltini.app.agent.AgentStatusBus.listener = { msg ->
@@ -321,7 +315,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
 
         audioRecorder = AudioRecorder(
             onAudioChunkCaptured = { pcmChunk ->
-                if (!_isSleeping.value) {
+                if (!isSleeping.value) {
                     val gate = voiceGate
                     if (gate != null) {
                         val now = System.currentTimeMillis()
@@ -341,7 +335,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
                 }
             },
             onSpeechStateChanged = {
-                lastSpeechTimestamp = System.currentTimeMillis()
+                sleepStandbyManager.updateSpeechTimestamp()
             }
         ).apply {
             isDataSaverEnabled = appSettings.isDataSaverEnabled
@@ -391,26 +385,73 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
 
         // Screen Companion Hook: When proactive insight is triggered, deliver to Gemini Live session
         com.soltini.app.companion.ScreenCompanionManager.getInstance(this).onProactiveInsightReady = { insightPrompt ->
-            if (!_isSleeping.value && geminiLiveManager.connectionState.value == ConnectionState.Live &&
+            if (!isSleeping.value && geminiLiveManager.connectionState.value == ConnectionState.Live &&
                 !com.soltini.app.agent.AgentTaskRegistry.isBusy() && activeToolCallCount.get() == 0) {
                 geminiLiveManager.sendClientContent(insightPrompt)
             }
         }
 
-        // Phone Call Handling Hook: Announce incoming calls aloud to Boss and handle voice control
-        val callNotificationManager = com.soltini.app.telephony.CallNotificationManager.getInstance(this)
-        callNotificationManager.startListening()
-        callNotificationManager.onIncomingCallDetected = { callerName, phoneNumber ->
-            Log.i(TAG, "Incoming call detected in BackgroundVoiceService: $callerName ($phoneNumber)")
-            if (!_isSleeping.value && geminiLiveManager.connectionState.value == ConnectionState.Live) {
-                geminiLiveManager.sendClientContent(buildIncomingCallPrompt(callerName, phoneNumber))
-            } else if (isNetworkOnline()) {
-                // Online but not live yet: wake / connect and announce the moment Gemini is Live.
-                // Offline: stay completely silent (no robotic TTS).
-                pendingCallAnnouncement = callerName to phoneNumber
-                if (_isSleeping.value) wakeUp() else connect()
-            }
-        }
+        // Initialize helper managers
+        pauseModeManager = VoicePauseModeManager(
+            context = this,
+            audioRecorder = audioRecorder,
+            audioPlayer = audioPlayer,
+            geminiLiveManager = geminiLiveManager,
+            getWakeLock = { wakeLock },
+            onStopWakeListening = { sleepStandbyManager.stopWakeListening() },
+            onConnect = { connect() },
+            onSetSleeping = { /* managed via pause state */ },
+            onUpdateNotification = { updateNotification(it) },
+            onStopSelf = { stopSelf() }
+        )
+
+        sleepStandbyManager = VoiceSleepStandbyManager(
+            context = this,
+            serviceScope = serviceScope,
+            appSettings = appSettings,
+            audioRecorder = audioRecorder,
+            audioPlayer = audioPlayer,
+            geminiLiveManager = geminiLiveManager,
+            hasMicPermission = { _hasMicPermission.value },
+            isLitePaused = { pauseModeManager.isLitePaused.value },
+            isHardPaused = { pauseModeManager.isHardPaused.value },
+            getConnectionState = { connectionState.value },
+            getActiveToolCallCount = { activeToolCallCount.get() },
+            getVoiceGate = { voiceGate },
+            getWakeLock = { wakeLock },
+            onConnect = { connect() }
+        )
+        sleepStandbyManager.initWakeWord(headsetRouter)
+        sleepStandbyManager.startInactivityWatcher()
+
+        callHandler = VoiceCallHandler(
+            context = this,
+            geminiLiveManager = geminiLiveManager,
+            isSleeping = { isSleeping.value },
+            isNetworkOnline = { isNetworkOnline() },
+            onWakeUp = { wakeUp() },
+            onConnect = { connect() }
+        )
+        callHandler.startListening()
+
+        toolRouter = VoiceToolRouter(
+            context = this,
+            serviceScope = serviceScope,
+            geminiLiveManager = geminiLiveManager,
+            pluginRegistry = pluginRegistry,
+            deviceController = deviceController,
+            agentToolExecutor = agentToolExecutor,
+            browserUseClient = browserUseClient,
+            myraOrchestrator = myraOrchestrator,
+            memory2Engine = memory2Engine,
+            appSettings = appSettings,
+            activeToolCallCount = activeToolCallCount,
+            pendingAutomationRequests = pendingAutomationRequests,
+            onSleepRequested = { sleep() },
+            onSilentTurnSet = { silentTurn = it },
+            onAppendUserMessage = { appendUserMessage(it) },
+            onAppendAgentMessage = { appendAgentMessage(it) }
+        )
 
         connectionState = geminiLiveManager.connectionState
         errorMessage = geminiLiveManager.errorMessage
@@ -431,7 +472,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
                             }
                         }
 
-                        lastSpeechTimestamp = System.currentTimeMillis()
+                        sleepStandbyManager.updateSpeechTimestamp()
                         if (_hasMicPermission.value) {
                             audioRecorder.startRecording()
                         }
@@ -440,22 +481,12 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
                             headsetRouter?.start()
                         }
                         OverlayService.getInstance()?.setRingState(com.soltini.app.overlay.RingState.LISTENING)
-                        pendingCallAnnouncement?.let { (name, number) ->
-                            pendingCallAnnouncement = null
-                            if (callNotificationManager.isRinging) {
-                                serviceScope.launch {
-                                    delay(300) // let the session finish its setup handshake
-                                    if (connectionState.value == ConnectionState.Live && callNotificationManager.isRinging) {
-                                        geminiLiveManager.sendClientContent(buildIncomingCallPrompt(name, number))
-                                    }
-                                }
-                            }
-                        }
-                        if (wakeGreetingPending) {
-                            wakeGreetingPending = false
+                        callHandler.checkAndAnnouncePendingCall()
+                        if (sleepStandbyManager.wakeGreetingPending) {
+                            sleepStandbyManager.wakeGreetingPending = false
                             serviceScope.launch {
                                 delay(400)
-                                if (connectionState.value == ConnectionState.Live && !_isSleeping.value) {
+                                if (connectionState.value == ConnectionState.Live && !isSleeping.value) {
                                     geminiLiveManager.sendClientContent(
                                         "[System: the user just woke you by saying your name. Greet them with one very short, warm sentence and wait for their request." +
                                             (com.soltini.app.learning.UpcomingDates.todayHint(this@BackgroundVoiceService)?.let { " $it Wish them warmly in the same sentence." } ?: "") + "]"
@@ -474,7 +505,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
 
                         audioRecorder.stopRecording()
                         headsetRouter?.stop()
-                        val ringState = if (_isSleeping.value) com.soltini.app.overlay.RingState.SLEEPING else com.soltini.app.overlay.RingState.IDLE
+                        val ringState = if (isSleeping.value) com.soltini.app.overlay.RingState.SLEEPING else com.soltini.app.overlay.RingState.IDLE
                         OverlayService.getInstance()?.setRingState(ringState)
                     }
                     else -> {}
@@ -493,7 +524,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
                 audioRecorder.isModelSpeaking = isSpeaking
                 voiceGate?.isModelSpeaking = isSpeaking
                 if (isSpeaking) {
-                    lastSpeechTimestamp = System.currentTimeMillis()
+                    sleepStandbyManager.updateSpeechTimestamp()
                 }
                 OverlayService.getInstance()?.setTalking(isSpeaking)
                 if (connectionState.value == ConnectionState.Live) {
@@ -525,11 +556,12 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
             stopSelf(startId)
             return START_NOT_STICKY
         }
-        if (_isSleeping.value && !_isLitePaused.value && !_isHardPaused.value) {
+        if (isSleeping.value && !isLitePaused.value && !isHardPaused.value) {
             wakeUp()
         }
-        if (!_isSleeping.value && !_isLitePaused.value && !_isHardPaused.value) {
-            if (_hasMicPermission.value && connectionState.value == ConnectionState.Disconnected) {
+        if (!isSleeping.value && !isLitePaused.value && !isHardPaused.value) {
+            if (_hasMicPermission.value && connectionState.value == ConnectionState.Disconnected &&
+                !userExplicitlyDisconnected && appSettings.isAssistantMasterEnabled && !appSettings.isBedtimeQuietHoursActive()) {
                 connect()
             }
         }
@@ -548,8 +580,8 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (_isLitePaused.value || _isHardPaused.value) {
-            Log.i(TAG, "Task removed while PAUSED — shutting down completely and not auto-restarting")
+        if (isLitePaused.value || isHardPaused.value || userExplicitlyDisconnected || !appSettings.isAssistantMasterEnabled || appSettings.isBedtimeQuietHoursActive()) {
+            Log.i(TAG, "Task removed while PAUSED/DISCONNECTED/BEDTIME — shutting down completely and not auto-restarting")
             
             // Fully shut down everything since the user swiped away while paused
             audioRecorder.stopRecording()
@@ -680,6 +712,7 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
     }
 
     fun connect() {
+        userExplicitlyDisconnected = false
         if (isPaused.value) {
             Log.i(TAG, "connect() ignored because service is paused.")
             return
@@ -692,24 +725,11 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
         ) {
             onPermissionResult(true)
         }
-        _isSleeping.value = false
+        sleepStandbyManager.markAwake()
         geminiLiveManager.connect()
     }
 
-    @Volatile private var pendingCallAnnouncement: Pair<String, String?>? = null
-
-    private fun buildIncomingCallPrompt(callerName: String, phoneNumber: String?): String =
-        """[URGENT INCOMING PHONE CALL]
-Caller: "$callerName" (${phoneNumber ?: "Unknown number"}).
-Boss ke phone par call aa raha hai!
-Turant Boss ko bolo:
-"Boss, $callerName ka call aa raha hai, aap bataiye kya karna hai — uthana hai ya reject karna hai?"
-Aur Boss jo bolein:
-- Agar Boss bolein "utha lo", "answer karo", "haan receive karo", "phone uthao": execute tool `answer_call`.
-- Agar Boss bolein "kaat do", "reject karo", "mat uthao", "phone kaat de": execute tool `reject_call`.
-Speak now immediately!"""
-
-    private fun isNetworkOnline(): Boolean = try {
+    fun isNetworkOnline(): Boolean = try {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
         val caps = cm.getNetworkCapabilities(cm.activeNetwork)
         caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
@@ -728,7 +748,8 @@ Speak now immediately!"""
                 override fun onAvailable(network: android.net.Network) {
                     serviceScope.launch {
                         val st = connectionState.value
-                        if (_hasMicPermission.value && !_isSleeping.value && !isPaused.value &&
+                        if (_hasMicPermission.value && !isSleeping.value && !isPaused.value &&
+                            !userExplicitlyDisconnected && appSettings.isAssistantMasterEnabled && !appSettings.isBedtimeQuietHoursActive() &&
                             (st == ConnectionState.Disconnected || st == ConnectionState.Reconnecting)
                         ) {
                             Log.i(TAG, "Network available again: reconnecting Gemini Live")
@@ -766,6 +787,7 @@ Speak now immediately!"""
     }
 
     fun disconnect() {
+        userExplicitlyDisconnected = true
         audioRecorder.stopRecording()
         audioPlayer.stop()
         geminiLiveManager.disconnect()
@@ -831,957 +853,27 @@ Speak now immediately!"""
         }
     }
 
-    // ── Lite Pause (default) ─────────────────────────────────────────────────
-    /**
-     * Lite Pause Mode:
-     *   • Stops mic + WebSocket (0 data while paused)
-     *   • Sets isPausedLite = true on the accessibility service, making it
-     *     completely silent: onAccessibilityEvent returns immediately,
-     *     no window reads — functionally invisible to most banking apps
-     *     (GPay, PhonePe, Paytm, most bank apps check for active monitoring,
-     *     not just whether the service is listed).
-     *   • Does NOT call disableSelf() — so NO re-enable is needed on resume.
-     *   • Resume is instant: mic + WebSocket reconnect automatically.
-     */
-    fun enterLitePauseMode() {
-        if (_isLitePaused.value || _isHardPaused.value) return
-        Log.i(TAG, "Entering Lite Pause — silencing accessibility without disabling")
-        stopWakeListening()
-        _isLitePaused.value = true
-        _isSleeping.value = true
+    // ── Pause Modes ─────────────────────────────────────────────────────────
+    fun enterLitePauseMode() = pauseModeManager.enterLitePauseMode()
+    fun exitLitePauseMode() = pauseModeManager.exitLitePauseMode()
+    fun toggleLitePauseMode() = pauseModeManager.toggleLitePauseMode()
 
-        audioRecorder.stopRecording()
-        audioPlayer.stop()
-        geminiLiveManager.disconnect()
-        wakeLock?.let { if (it.isHeld) it.release() }
+    fun enterHardPauseMode() = pauseModeManager.enterHardPauseMode()
+    fun exitHardPauseMode() = pauseModeManager.exitHardPauseMode()
+    fun toggleHardPauseMode() = pauseModeManager.toggleHardPauseMode()
 
-        // Silence the service without disabling it
-        com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isPausedLite = true
-        com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isToolCallActive = false
+    fun enterPauseMode() = pauseModeManager.enterPauseMode()
+    fun exitPauseMode() = pauseModeManager.exitPauseMode()
+    fun togglePauseMode() = pauseModeManager.togglePauseMode()
 
-        // Completely hide the orb overlay while paused
-        OverlayService.getInstance()?.setHiddenForBanking(true)
-        updateNotification("⏸ Lite Pause — tap to resume")
-    }
+    // ── Sleep & Wake ────────────────────────────────────────────────────────
+    fun sleep() = sleepStandbyManager.sleep()
+    fun wakeUp() = sleepStandbyManager.wakeUp()
+    fun toggleSleep() = sleepStandbyManager.toggleSleep()
 
-    fun exitLitePauseMode() {
-        if (!_isLitePaused.value) return
-        Log.i(TAG, "Exiting Lite Pause")
-        _isLitePaused.value = false
-        _isSleeping.value = false
-
-        // Un-silence the accessibility service
-        com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isPausedLite = false
-
-        if (wakeLock?.isHeld == false) wakeLock?.acquire(10 * 60 * 1000L)
-        // Show the orb overlay again
-        OverlayService.getInstance()?.setHiddenForBanking(false)
-        OverlayService.getInstance()?.setRingState(com.soltini.app.overlay.RingState.IDLE)
-        updateNotification("Your AI Assistant is ready")
-        connect()
-    }
-
-    fun toggleLitePauseMode() {
-        if (_isLitePaused.value) exitLitePauseMode() else enterLitePauseMode()
-    }
-
-    // ── Hard Pause (strict banks) ─────────────────────────────────────────────
-    /**
-     * Hard Pause Mode:
-     *   • Stops mic + WebSocket
-     *   • Calls disableSelf() — removes Soltini from Android's enabled-services
-     *     list entirely. Even the most strict banking apps (HDFC, ICICI) will
-     *     not find it.
-     *   • On resume, automatically opens the accessibility settings screen so the
-     *     user only needs ONE tap to re-enable (instead of hunting through menus).
-     */
-    fun enterHardPauseMode() {
-        if (_isHardPaused.value || _isLitePaused.value) return
-        Log.i(TAG, "Entering Hard Pause (Force Stop) — opening App Info to self-terminate")
-        stopWakeListening()
-        _isHardPaused.value = true
-        _isSleeping.value = true
-
-        audioRecorder.stopRecording()
-        audioPlayer.stop()
-        geminiLiveManager.disconnect()
-        wakeLock?.let { if (it.isHeld) it.release() }
-
-        // Tell the accessibility service to look for and click the Force Stop button
-        val a11yService = com.soltini.app.agent.SoltiniAccessibilityService.getInstance()
-        if (a11yService != null) {
-            a11yService.isAutomatingForceStop = true
-
-            // Launch the App Info settings screen for this app
-            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = android.net.Uri.fromParts("package", packageName, null)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            startActivity(intent)
-        } else {
-            // Fallback if accessibility is dead
-            stopSelf()
-        }
-
-        OverlayService.getInstance()?.setRingState(com.soltini.app.overlay.RingState.SLEEPING)
-        updateNotification("🔴 Force Stopped — open app to resume")
-    }
-
-    fun exitHardPauseMode() {
-        if (!_isHardPaused.value) return
-        Log.i(TAG, "Exiting Hard Pause (Force Stop mode)")
-        _isHardPaused.value = false
-        _isSleeping.value = false
-
-        if (wakeLock?.isHeld == false) wakeLock?.acquire(10 * 60 * 1000L)
-        OverlayService.getInstance()?.setRingState(com.soltini.app.overlay.RingState.IDLE)
-        updateNotification("Your AI Assistant is ready")
-
-        // Accessibility is automatically rebound when the app is manually launched after Force Stop
-        connect()
-    }
-
-    fun toggleHardPauseMode() {
-        if (_isHardPaused.value) exitHardPauseMode() else enterHardPauseMode()
-    }
-
-    private fun openAccessibilitySettings() {
-        try {
-            val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not open accessibility settings: ${e.message}")
-        }
-    }
-
-    // Legacy compat — togglePauseMode now triggers Lite Pause by default
-    fun enterPauseMode() = enterLitePauseMode()
-    fun exitPauseMode() = if (_isLitePaused.value) exitLitePauseMode() else exitHardPauseMode()
-    fun togglePauseMode() = toggleLitePauseMode()
-
-    /**
-     * Puts Soltini into 100% sleep:
-     *   - Stops microphone recording (AudioRecord released)
-     *   - Stops audio playback (AudioTrack released)
-     *   - Fully disconnects Gemini WebSocket + shuts down OkHttp client
-     *   - Releases the WakeLock so the CPU can actually sleep
-     *   - Disables accessibility tool-call flag (no event processing overhead)
-     *
-     * The foreground service stays alive (notification visible) so Android keeps
-     * the process ready for the next wakeup tap on the orb.
-     */
-    fun sleep() {
-        Log.i(TAG, "Soltini going to sleep — full power-down")
-        _isSleeping.value = true
-
-        // Stop all audio hardware
-        audioRecorder.stopRecording()
-        audioPlayer.stop()
-
-        // Cut the WebSocket and shut down the OkHttp thread pool
-        geminiLiveManager.disconnect()
-
-        // Release WakeLock — CPU can now truly sleep between orb taps
-        wakeLock?.let { if (it.isHeld) it.release() }
-
-        // Disable accessibility event processing — no overhead while idle
-        com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isToolCallActive = false
-
-        OverlayService.getInstance()?.setRingState(com.soltini.app.overlay.RingState.SLEEPING)
-
-        // Standby: the offline wake-word listener now owns the mic.
-        if (!_isLitePaused.value && !_isHardPaused.value) {
-            MyraSoundEffects.playStandbySound()
-            startWakeListening()
-        }
-    }
-
-    /**
-     * Wakes Soltini from sleep:
-     *   - Reacquires a fresh WakeLock (10-min timeout)
-     *   - Reconnects to Gemini Live WebSocket
-     */
-    fun wakeUp() {
-        Log.i(TAG, "Soltini waking up from sleep")
-        voiceGate?.openWindow(8000L)   // Boss just said the wake word: let the first short command through
-        stopWakeListening()
-        _isSleeping.value = false
-        lastSpeechTimestamp = System.currentTimeMillis()
-
-        // Reacquire WakeLock so the CPU stays on during voice session
-        if (wakeLock?.isHeld == false) {
-            wakeLock?.acquire(10 * 60 * 1000L)
-        }
-
-        connect()
-    }
-
-    // ─── Standby / wake word ────────────────────────────────────────────────
-
-    private fun startWakeListening() {
-        if (!appSettings.isWakeWordEnabled || !_hasMicPermission.value) return
-        if (!_isSleeping.value || _isLitePaused.value || _isHardPaused.value) return
-        acquireStandbyLock()
-        serviceScope.launch {
-            delay(600) // let the standby chime finish so it is not heard as speech
-            if (_isSleeping.value && !_isLitePaused.value && !_isHardPaused.value &&
-                appSettings.isWakeWordEnabled
-            ) {
-                wakeWordEngine?.start()
-            }
-        }
-    }
-
-    private fun stopWakeListening() {
-        wakeWordEngine?.stop()
-        releaseStandbyLock()
-    }
-
-    private fun acquireStandbyLock() {
-        try {
-            if (standbyWakeLock == null) {
-                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-                standbyWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Soltini::WakeWordLock")
-                    .apply { setReferenceCounted(false) }
-            }
-            if (standbyWakeLock?.isHeld == false) standbyWakeLock?.acquire()
-        } catch (e: Exception) {
-            Log.w(TAG, "Standby wake lock failed: ${e.message}")
-        }
-    }
-
-    private fun releaseStandbyLock() {
-        try {
-            standbyWakeLock?.let { if (it.isHeld) it.release() }
-        } catch (_: Exception) {}
-    }
-
-    /** Called by [WakeWordEngine] when "Myra" is confirmed. */
-    private fun onWakeWordDetected() {
-        if (!_isSleeping.value || _isLitePaused.value || _isHardPaused.value) return
-        // Release the mic before Gemini's recorder takes it.
-        stopWakeListening()
-        vibrateBriefly()
-        MyraSoundEffects.playWakeSound()
-        wakeGreetingPending = true
-        serviceScope.launch {
-            delay(250)
-            if (_isSleeping.value && !_isLitePaused.value && !_isHardPaused.value) wakeUp()
-        }
-    }
-
-    private fun vibrateBriefly() {
-        try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager)?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-            }
-            vibrator?.vibrate(
-                android.os.VibrationEffect.createOneShot(40, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
-            )
-        } catch (_: Exception) {}
-    }
-
-    /** Idle for appSettings.autoSleepMinutes (0 = off) -> standby, so Gemini uses no data. */
-    private fun startInactivityWatcher() {
-        inactivityJob?.cancel()
-        inactivityJob = serviceScope.launch {
-            while (isActive) {
-                delay(15_000)
-                val mins = appSettings.autoSleepMinutes
-                if (mins <= 0) continue
-                if (_isSleeping.value || _isLitePaused.value || _isHardPaused.value) continue
-                if (connectionState.value != ConnectionState.Live) continue
-                if (activeToolCallCount.get() > 0) continue
-                if (System.currentTimeMillis() - lastSpeechTimestamp >= mins * 60_000L) {
-                    Log.i(TAG, "Idle for $mins min — entering standby")
-                    sleep()
-                }
-            }
-        }
-    }
-
-    /**
-     * Toggles between sleep and awake states.
-     * Called when the user taps the floating orb while the agent is sleeping.
-     */
-    fun toggleSleep() {
-        if (_isSleeping.value) wakeUp() else sleep()
-    }
-
-    // ─── ToolCallListener Implementation ─────────────────────────────────────
-
-    /**
-     * Called on the main thread when Gemini sends a toolCall message.
-     * We execute the action and send the result back to Gemini.
-     *
-     * Uses an atomic counter instead of a plain boolean flag so that concurrent
-     * tool calls can each independently increment/decrement without clobbering each
-     * other. High-friction accessibility tracking is on only while count > 0.
-     */
+    // ── ToolCallListener Implementation ─────────────────────────────────────
     override fun onToolCall(callId: String, toolName: String, args: JSONObject) {
-        Log.i(TAG, "Tool call received: $toolName (callId=$callId) | args: $args")
-        // Silent Execution: action tools mute narration for the rest of this turn.
-        // Read/lookup tools stay audible because their whole point is the spoken answer.
-        if (toolName !in SILENT_EXEMPT_TOOLS && toolName != "sleep_agent") silentTurn = true
-
-        // ─── Storage Intelligence, File Manager & RAG ─────────────────────────
-        if (toolName == "manage_files" || toolName == "file_manager") {
-            serviceScope.launch(Dispatchers.IO) {
-                try {
-                    val plugin = pluginRegistry.getPlugin("file_manager_service")
-                    val ctx = com.soltini.app.plugins.PluginContext(
-                        context = applicationContext,
-                        parameters = args
-                    )
-                    val res = plugin?.execute(ctx)
-                    val respJson = JSONObject().apply {
-                        put("status", if (res?.isSuccess == true) "success" else "error")
-                        put("summary", res?.summary ?: "File operation finished")
-                        put("data", res?.data ?: JSONObject())
-                    }
-                    geminiLiveManager.sendToolResponse(callId, toolName, respJson)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error executing manage_files: ${e.message}", e)
-                    val errJson = JSONObject().apply {
-                        put("status", "error")
-                        put("message", "File operation failed: ${e.message}")
-                    }
-                    geminiLiveManager.sendToolResponse(callId, toolName, errJson)
-                }
-            }
-            return
-        }
-
-        if (toolName == "control_device") {
-            val deviceName = args.optString("device_name", "")
-            val action = args.optString("action", "TOGGLE")
-            Log.i(TAG, "Smart Home control_device: deviceName='$deviceName', action='$action'")
-
-            serviceScope.launch(Dispatchers.IO) {
-                try {
-                    val resultJson = deviceController.executeControl(callId, deviceName, action)
-                    geminiLiveManager.sendToolResponse(callId, toolName, resultJson)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error executing control_device: ${e.message}", e)
-                    val errorJson = JSONObject().apply {
-                        put("status", "error")
-                        put("message", "Failed to execute device control: ${e.message}")
-                    }
-                    geminiLiveManager.sendToolResponse(callId, toolName, errorJson)
-                }
-            }
-            return
-        }
-
-        if (toolName == "read_notifications") {
-            val notifRepo = NotificationRepository.getInstance(applicationContext)
-            if (!notifRepo.isNotificationAccessGranted()) {
-                geminiLiveManager.sendToolResponse(
-                    callId, toolName,
-                    JSONObject().apply {
-                        put("status", "permission_needed")
-                        put("message", "Notification access permission is not enabled. Ask the user to enable Notification Access in the app Settings so you can read notifications.")
-                    }
-                )
-                return
-            }
-
-            val limit = args.optInt("limit", 5)
-            val appFilter = args.optString("app_filter", "").takeIf { it.isNotBlank() }
-            val list = notifRepo.getRecentNotifications(limit = limit, appFilter = appFilter)
-
-            if (list.isEmpty()) {
-                geminiLiveManager.sendToolResponse(
-                    callId, toolName,
-                    JSONObject().apply {
-                        put("status", "empty")
-                        put("message", if (appFilter != null) "No recent notifications found for $appFilter." else "No new notifications found right now.")
-                    }
-                )
-            } else {
-                val array = JSONArray()
-                list.forEach { notif ->
-                    array.put(JSONObject().apply {
-                        put("app", notif.appName)
-                        put("sender", notif.title)
-                        put("message", notif.text)
-                        put("time_ago", notif.getTimeAgo())
-                        put("can_reply", notif.canReply)
-                    })
-                }
-                geminiLiveManager.sendToolResponse(
-                    callId, toolName,
-                    JSONObject().apply {
-                        put("status", "success")
-                        put("count", list.size)
-                        put("notifications", array)
-                        put("instruction", "Read these notifications aloud conversationally, mentioning the app, sender, and message. Ask if they want to reply to any of them.")
-                    }
-                )
-            }
-            return
-        }
-
-        if (toolName == "reply_to_notification") {
-            val notifRepo = NotificationRepository.getInstance(applicationContext)
-            if (!notifRepo.isNotificationAccessGranted()) {
-                geminiLiveManager.sendToolResponse(
-                    callId, toolName,
-                    JSONObject().apply {
-                        put("status", "permission_needed")
-                        put("message", "Notification access permission is not enabled.")
-                    }
-                )
-                return
-            }
-
-            val recipient = args.optString("recipient_or_app", "")
-            val replyMessage = args.optString("reply_message", "")
-
-            val result = notifRepo.replyToNotification(recipient, replyMessage)
-            when (result) {
-                is ReplyResult.Success -> {
-                    geminiLiveManager.sendToolResponse(
-                        callId, toolName,
-                        JSONObject().apply {
-                            put("status", "success")
-                            put("message", "Sent reply to ${result.recipient} on ${result.appName}: \"${result.replyText}\". Inform the user that the reply was sent successfully.")
-                        }
-                    )
-                }
-                is ReplyResult.Failure -> {
-                    geminiLiveManager.sendToolResponse(
-                        callId, toolName,
-                        JSONObject().apply {
-                            put("status", "error")
-                            put("message", result.reason)
-                        }
-                    )
-                }
-            }
-            return
-        }
-
-        if (toolName == "manage_ignored_apps") {
-            val notifRepo = NotificationRepository.getInstance(applicationContext)
-            val action = args.optString("action", "LIST").uppercase()
-            val appName = args.optString("app_name", "").trim()
-
-            when (action) {
-                "IGNORE" -> {
-                    if (appName.isBlank()) {
-                        geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                            put("status", "error")
-                            put("message", "Please specify which app you want to ignore.")
-                        })
-                    } else {
-                        notifRepo.ignoreApp(appName)
-                        geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                            put("status", "success")
-                            put("message", "Added $appName to ignored notifications list. Notifications from $appName will no longer be read.")
-                        })
-                    }
-                }
-                "UNIGNORE" -> {
-                    if (appName.isBlank()) {
-                        geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                            put("status", "error")
-                            put("message", "Please specify which app you want to unignore.")
-                        })
-                    } else {
-                        val removed = notifRepo.unignoreApp(appName)
-                        geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                            put("status", "success")
-                            put("message", if (removed) "Removed $appName from ignored list. Its notifications will be read now." else "$appName was not in the ignored list.")
-                        })
-                    }
-                }
-                else -> {
-                    val ignoredSet = notifRepo.getIgnoredApps()
-                    geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                        put("status", "success")
-                        put("ignored_apps", JSONArray(ignoredSet.toList()))
-                        put("message", if (ignoredSet.isEmpty()) "No apps are currently ignored. Soltini reads notifications from all apps." else "Currently ignored apps: ${ignoredSet.joinToString(", ")}")
-                    })
-                }
-            }
-            return
-        }
-
-        if (toolName == "observe_screen") {
-            val queryFocus = args.optString("query_focus", "")
-            serviceScope.launch(Dispatchers.IO) {
-                val companionManager = com.soltini.app.companion.ScreenCompanionManager.getInstance(applicationContext)
-                val snapshot = companionManager.captureCurrentScreenWithVision(queryFocus)
-
-                if (!snapshot.isAvailable) {
-                    geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                        put("status", "unavailable")
-                        put("message", snapshot.errorMessage ?: "Screen is not accessible right now.")
-                    })
-                } else if (snapshot.isSecure) {
-                    geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                        put("status", "secure_screen")
-                        put("message", "Screen viewing is safely paused because a banking, payment, or secure app is currently visible.")
-                    })
-                } else {
-                    // Send visual frame to Gemini Live WebSocket multimodal stream
-                    if (!snapshot.base64Jpeg.isNullOrBlank()) {
-                        geminiLiveManager.sendImageFrame(snapshot.base64Jpeg)
-                    }
-
-                    val summary = snapshot.toHumanSummary()
-                    geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                        put("status", "success")
-                        put("app", snapshot.currentApp)
-                        put("summary", summary)
-                        put("typing_now", JSONArray(snapshot.userTypingTexts))
-                        put("visible_items", JSONArray(snapshot.visibleTexts.take(15)))
-                        if (snapshot.visualSummary.isNotBlank()) {
-                            put("visual_vision_details", snapshot.visualSummary)
-                        }
-                        put("instruction", "You are looking directly at Boss's phone screen with both visual eyes (Gemini Vision) and accessibility inspection. If query_focus was '$queryFocus', answer it directly with high accuracy. Speak in a warm, sweet, human-like voice (natural conversational Hinglish). Describe what is visually seen, including photos, products, colors, graphs, or icons.")
-                    })
-                }
-            }
-            return
-        }
-
-        if (toolName == "toggle_screen_companion") {
-            val enable = args.optBoolean("enabled", true)
-            val companionManager = com.soltini.app.companion.ScreenCompanionManager.getInstance(applicationContext)
-            companionManager.setLiveCompanionEnabled(enable)
-
-            geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                put("status", "success")
-                put("enabled", enable)
-                put("message", if (enable) {
-                    "Live Screen Companion mode is now ACTIVE. You are actively watching their screen and will offer helpful tips, suggestions, and assistance whenever they work or type."
-                } else {
-                    "Live Screen Companion mode has been turned OFF. You will only observe the screen when explicitly asked."
-                })
-            })
-            return
-        }
-
-        if (toolName == "sleep_agent") {
-            sleep()
-            return
-        }
-
-        if (toolName == "answer_call") {
-            val callManager = com.soltini.app.telephony.CallNotificationManager.getInstance(applicationContext)
-            val res = callManager.answerCallDetailed()
-            geminiLiveManager.sendToolResponse(
-                callId, toolName,
-                JSONObject().apply {
-                    put("status", if (res.success) "success" else "failed")
-                    put("method", res.method)
-                    put("message", res.message)
-                    put("instruction", if (res.success) {
-                        "Confirm to Boss politely in Hindi/Hinglish: 'Ji Boss, call receive kar liya hai.'"
-                    } else {
-                        "Inform Boss in Hindi/Hinglish that call could not be answered: 'Boss, call receive nahi ho paya: ${res.message}'"
-                    })
-                }
-            )
-            return
-        }
-
-        if (toolName == "reject_call") {
-            val callManager = com.soltini.app.telephony.CallNotificationManager.getInstance(applicationContext)
-            val res = callManager.rejectCallDetailed()
-            geminiLiveManager.sendToolResponse(
-                callId, toolName,
-                JSONObject().apply {
-                    put("status", if (res.success) "success" else "failed")
-                    put("method", res.method)
-                    put("message", res.message)
-                    put("instruction", if (res.success) {
-                        "Confirm to Boss politely in Hindi/Hinglish: 'Ji Boss, call cut kar diya hai.'"
-                    } else {
-                        "Inform Boss in Hindi/Hinglish that call could not be rejected: 'Boss, call reject nahi ho paya: ${res.message}'"
-                    })
-                }
-            )
-            return
-        }
-
-        if (toolName == "get_call_info" || toolName == "who_is_calling") {
-            val callManager = com.soltini.app.telephony.CallNotificationManager.getInstance(applicationContext)
-            val info = callManager.getCurrentCallInfo()
-            val json = info.toJsonObject()
-            val instruction = if (info.isIncoming) {
-                "Tell Boss in Hindi/Hinglish: 'Call aa raha hai ${info.callerName ?: "Unknown"}. Kya aap receive karna chahte hain ya reject karna chahte hain?'"
-            } else {
-                "Tell Boss in Hindi/Hinglish: 'Boss, abhi koi incoming call nahi aa raha hai (Current state: ${info.callState}).'"
-            }
-            json.put("instruction", instruction)
-            geminiLiveManager.sendToolResponse(callId, toolName, json)
-            return
-        }
-
-        if (toolName == "send_sms") {
-            val recipient = args.optString("recipient", args.optString("contact", ""))
-            val message = args.optString("message", args.optString("text", ""))
-            val cleanMsg = com.soltini.app.orchestrator.MyraCommandParser.cleanMessageBody(message).ifBlank { message.trim() }
-            val cleanRec = com.soltini.app.orchestrator.MyraCommandParser.cleanRecipient(recipient).ifBlank { recipient.trim() }
-
-            val callManager = com.soltini.app.telephony.CallNotificationManager.getInstance(applicationContext)
-            val matches = callManager.searchContacts(cleanRec)
-
-            if (matches.isEmpty()) {
-                geminiLiveManager.sendToolResponse(
-                    callId, toolName,
-                    JSONObject().apply {
-                        put("status", "failed")
-                        put("message", "Contacts me '$cleanRec' nahi mila.")
-                        put("instruction", "Tell Boss in Hindi/Hinglish: 'Contacts me $cleanRec naam ka koi contact nahi mila. Kripya phone number batayein.'")
-                    }
-                )
-            } else if (matches.size > 1 && !matches.any { it.name.equals(cleanRec, ignoreCase = true) }) {
-                val listStr = matches.take(3).joinToString(", ") { "${it.name} (${it.phoneNumber})" }
-                geminiLiveManager.sendToolResponse(
-                    callId, toolName,
-                    JSONObject().apply {
-                        put("status", "clarification_needed")
-                        put("message", "Multiple contacts found: $listStr")
-                        put("instruction", "Ask Boss in Hindi/Hinglish: '$cleanRec naam ke multiple contacts mile: $listStr. Kisko message bhejna hai?'")
-                    }
-                )
-            } else {
-                val target = matches.find { it.name.equals(cleanRec, ignoreCase = true) } ?: matches.first()
-                val smsSender = com.soltini.app.telephony.SmsSender(applicationContext)
-                val sendRes = smsSender.sendSms(target.phoneNumber, cleanMsg)
-                geminiLiveManager.sendToolResponse(
-                    callId, toolName,
-                    JSONObject().apply {
-                        put("status", if (sendRes.success) "success" else "failed")
-                        put("recipient", target.name)
-                        put("phone", target.phoneNumber)
-                        put("method", sendRes.method)
-                        put("message", sendRes.message)
-                        put("instruction", if (sendRes.success) {
-                            "Tell Boss clearly in Hindi/Hinglish: 'Ji Boss, ${target.name} ko message bhej diya gaya hai.'"
-                        } else {
-                            "Tell Boss clearly in Hindi/Hinglish: 'Message nahi bheja ja saka: ${sendRes.message}'"
-                        })
-                    }
-                )
-            }
-            return
-        }
-
-        if (toolName == "youtube_play") {
-            val query = args.optString("query", args.optString("song", args.optString("title", "")))
-            val cleanQuery = com.soltini.app.orchestrator.MyraCommandParser.cleanYouTubeQuery(query).ifBlank { query.trim() }
-            val destinationArg = args.optString("destination", args.optString("target", ""))
-            val useApp = !com.soltini.app.orchestrator.DestinationResolver.wantsInternalBrowser(query, destinationArg)
-            serviceScope.launch {
-                var ok: Boolean
-                var message: String
-                if (useApp) {
-                    // DEFAULT: real YouTube app. (Internal Browser is used only when explicitly requested.)
-                    val playRes = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                        com.soltini.app.agent.YouTubeAutomator(applicationContext).playSong(cleanQuery)
-                    }
-                    ok = playRes.optString("status") == "playing" || playRes.optString("status") == "success" ||
-                            playRes.optString("status") == "playing_video"
-                    message = playRes.optString("message", "Playing on YouTube app")
-                } else {
-                    // Explicit "internal browser" request only: Internal Browser + foreground media service.
-                    try {
-                        com.soltini.app.browser.BrowserController.getInstance(applicationContext).playMediaOnYouTube(cleanQuery)
-                        ok = true
-                        message = "Playing in Myra Internal Browser (background playback enabled)"
-                    } catch (e: Exception) {
-                        ok = false
-                        message = e.message ?: "Internal browser playback failed"
-                    }
-                }
-                geminiLiveManager.sendToolResponse(
-                    callId, toolName,
-                    JSONObject().apply {
-                        put("status", if (ok) "success" else "failed")
-                        put("query", cleanQuery)
-                        put("message", message)
-                        put("instruction", if (ok) {
-                            "Tell Boss clearly in Hindi/Hinglish: 'Ji Boss, YouTube par $cleanQuery play ho raha hai.'"
-                        } else {
-                            "Tell Boss clearly: 'YouTube par play karne me samasya aayi: $message'"
-                        })
-                    }
-                )
-            }
-            return
-        }
-
-        if (toolName == "youtube_search") {
-            val query = args.optString("query", args.optString("q", ""))
-            val cleanQuery = com.soltini.app.orchestrator.MyraCommandParser.cleanYouTubeQuery(query).ifBlank { query.trim() }
-            val youtubeAutomator = com.soltini.app.agent.YouTubeAutomator(applicationContext)
-            val searchRes = youtubeAutomator.search(cleanQuery)
-            val ok = searchRes.optString("status") == "searching" || searchRes.optString("status") == "success"
-            geminiLiveManager.sendToolResponse(
-                callId, toolName,
-                JSONObject().apply {
-                    put("status", if (ok) "success" else "failed")
-                    put("query", cleanQuery)
-                    put("message", searchRes.optString("message", "Searching on YouTube"))
-                    put("instruction", if (ok) {
-                        "Tell Boss clearly in Hindi/Hinglish: 'Ji Boss, YouTube par $cleanQuery search kar diya hai.'"
-                    } else {
-                        "Tell Boss clearly: 'YouTube search me samasya aayi: ${searchRes.optString("message")}'"
-                    })
-                }
-            )
-            return
-        }
-
-        if (toolName == "make_phone_call") {
-            val target = args.optString("contact_or_number", "")
-            val callManager = com.soltini.app.telephony.CallNotificationManager.getInstance(applicationContext)
-            val success = callManager.makeCall(target)
-            geminiLiveManager.sendToolResponse(
-                callId, toolName,
-                JSONObject().apply {
-                    put("status", if (success) "success" else "error")
-                    put("message", if (success) "Calling $target..." else "Could not place call to $target.")
-                    put("instruction", if (success) "Tell Boss: 'Ji Boss, $target ko call mila rahi hu.'" else "Tell Boss you couldn't place the call.")
-                }
-            )
-            return
-        }
-
-        if (toolName == "set_busy_mode") {
-            val enable = args.optBoolean("enable", true)
-            val reason = args.optString("reason", "busy")
-            val busyMgr = com.soltini.app.messaging.BusyModeManager.getInstance(applicationContext)
-            val responseMsg = if (enable) {
-                val sanitized = busyMgr.enableBusyMode(reason)
-                "Ji Boss, Busy mode activate ho gaya hai ($sanitized). Ab main messages padhkar reply draft karungi, par aapki confirmation ke bina kuch nahi bhejungi aur groups me kabhi reply nahi karungi."
-            } else {
-                val summary = busyMgr.disableBusyMode()
-                if (summary.totalRepliedCount > 0) {
-                    val contacts = summary.uniqueSenders.joinToString(", ")
-                    "Ji Boss, welcome back! Busy mode off kar diya gaya hai. Is session me aapki confirmation se ${summary.totalRepliedCount} replies gaye ($contacts)."
-                } else {
-                    "Ji Boss, Busy mode deactivate kar diya gaya hai. Is dauran koi naya message nahi aaya tha."
-                }
-            }
-            geminiLiveManager.sendToolResponse(
-                callId, toolName,
-                JSONObject().apply {
-                    put("status", "success")
-                    put("busy_mode_active", enable)
-                    put("message", responseMsg)
-                    put("instruction", "Speak this exact outcome directly to Boss in Hindi/Hinglish: '$responseMsg'")
-                }
-            )
-            appendAgentMessage(responseMsg)
-            return
-        }
-
-        if (toolName == "get_busy_mode_status") {
-            val busyMgr = com.soltini.app.messaging.BusyModeManager.getInstance(applicationContext)
-            val active = busyMgr.isBusyModeActive()
-            val reason = busyMgr.getBusyReason()
-            val history = busyMgr.getRecentHistory(10)
-            val msg = if (active) {
-                "Boss, abhi Busy Mode active hai ($reason). Total ${history.size} auto-replies bheje gaye hain."
-            } else {
-                "Boss, Busy Mode abhi band hai. Pichle session me ${history.size} messages handle kiye gaye the."
-            }
-            geminiLiveManager.sendToolResponse(
-                callId, toolName,
-                JSONObject().apply {
-                    put("status", "success")
-                    put("busy_mode_active", active)
-                    put("reason", reason)
-                    put("history_count", history.size)
-                    put("instruction", "Tell Boss in Hindi/Hinglish: '$msg'")
-                }
-            )
-            return
-        }
-
-        if (toolName == "trigger_automation") {
-            val request = args.optString("request", "")
-            if (com.soltini.app.agent.AgentTaskRegistry.isBusy() || activeToolCallCount.get() > 0) {
-                if (request.isNotBlank() && !pendingAutomationRequests.contains(request)) pendingAutomationRequests.add(request)
-                geminiLiveManager.sendToolResponse(callId, toolName, JSONObject().apply {
-                    put("status", "busy")
-                    put("message", "A task is already running. Do NOT start another one and do NOT drop the current one. Tell Boss in one short line that the current task is still in progress and that you saved the new request \"$request\" to do right after it. If Boss wants to stop the current task instead, use cancel_task.")
-                })
-                return
-            }
-            Log.i(TAG, "Triggering MYRA Orchestrator for request: \"$request\"")
-            appendUserMessage(request)
-
-            // 1. Immediately acknowledge to Live Voice model so it says "I'm on it!" without delay
-            geminiLiveManager.sendToolResponse(
-                callId,
-                toolName,
-                JSONObject().apply {
-                    put("status", "in_progress")
-                    put("message", "Automation task triggered for: \"$request\". Tell Boss you are working on it now (e.g. \"I'm on it!\" or \"Ji Boss, abhi karti hu!\"). Do NOT say it is already finished yet.")
-                }
-            )
-
-            // 2. Execute MYRA Orchestrator plan asynchronously
-            serviceScope.launch(Dispatchers.IO) {
-                val count = activeToolCallCount.incrementAndGet()
-                if (count == 1) {
-                    com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isToolCallActive = true
-                }
-                try {
-                    val orchestratorResult = myraOrchestrator.processRequest(request) { statusUpdate ->
-                        geminiLiveManager.sendClientContent(
-                            "[ORCHESTRATOR UPDATE: $statusUpdate]"
-                        )
-                    }
-
-                    appendAgentMessage(orchestratorResult.responseText)
-                    Log.i(TAG, "MYRA Orchestrator finished with outcome: ${orchestratorResult.responseText}")
-                    geminiLiveManager.sendClientContent(
-                        "[SYSTEM NOTIFICATION: Task completed for: \"$request\". Outcome: ${orchestratorResult.responseText}. Tools used: ${orchestratorResult.toolSequenceUsed.joinToString(", ")}. Speak directly to Boss in Hindi/Hinglish to share the outcome!]"
-                    )
-                    if (pendingAutomationRequests.isNotEmpty()) {
-                        val queued = pendingAutomationRequests.toList()
-                        pendingAutomationRequests.clear()
-                        geminiLiveManager.sendClientContent(
-                            "[PENDING TASKS: Boss ne ye kaam pichle task ke dauraan bole the: ${queued.joinToString(" | ")}. Ab inhe ek-ek karke order me trigger_automation se chalao, koi bhoolna nahi.]"
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "MYRA Orchestrator failed: ${e.message}", e)
-                    appendAgentMessage("Task failed: ${e.message}")
-                    geminiLiveManager.sendClientContent(
-                        "[SYSTEM NOTIFICATION: Background automation failed for request: \"$request\" with error: ${e.message}. Briefly inform Boss.]"
-                    )
-                } finally {
-                    val remaining = activeToolCallCount.decrementAndGet()
-                    if (remaining <= 0) {
-                        activeToolCallCount.set(0)
-                        com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isToolCallActive = false
-                    }
-                }
-            }
-            return
-        }
-
-        if (toolName == "browser_use_task") {
-            val request = args.optString("request", "")
-            Log.i(TAG, "Delegating to Browser-Use bridge for request: \"$request\"")
-            appendUserMessage(request)
-
-            // 1. Immediately acknowledge so the Live Voice model responds without delay
-            geminiLiveManager.sendToolResponse(
-                callId,
-                toolName,
-                JSONObject().apply {
-                    put("status", "in_progress")
-                    put("message", "Browser-Use task triggered for: \"$request\". Tell the user you are starting it on their desktop browser now. Do NOT say it is already finished yet.")
-                }
-            )
-
-            // 2. Call the bridge server asynchronously (this can take a while — real browser navigation)
-            serviceScope.launch(Dispatchers.IO) {
-                try {
-                    val result = browserUseClient.runTask(request)
-                    val status = result.optString("status", "error")
-                    val message = result.optString("message", "")
-
-                    appendAgentMessage(message)
-                    Log.i(TAG, "Browser-Use task finished: status=$status message=$message")
-                    geminiLiveManager.sendClientContent(
-                        "[SYSTEM NOTIFICATION: Browser-Use task ($status) for: \"$request\". Outcome: $message. Speak directly to the user in Hindi/Hinglish to share the outcome!]"
-                    )
-                } catch (e: Exception) {
-                    Log.e(TAG, "Browser-Use bridge call failed: ${e.message}", e)
-                    appendAgentMessage("Browser-Use task failed: ${e.message}")
-                    geminiLiveManager.sendClientContent(
-                        "[SYSTEM NOTIFICATION: Browser-Use task failed for request: \"$request\" with error: ${e.message}. Briefly inform the user.]"
-                    )
-                }
-            }
-            return
-        }
-
-        if (toolName == "browser_action") {
-            val action = args.optString("action", "snapshot").trim()
-            val ref = args.optString("ref", "").trim()
-            val text = args.optString("text", "").trim()
-            val url = args.optString("url", "").trim()
-
-            Log.i(TAG, "Executing in-app browser_action: action=$action ref=$ref url=$url")
-            appendAgentMessage("Browser action: $action ${if (ref.isNotBlank()) "ref=$ref" else ""} ${if (url.isNotBlank()) "url=$url" else ""}")
-
-            serviceScope.launch(Dispatchers.IO) {
-                val count = activeToolCallCount.incrementAndGet()
-                try {
-                    val browserController = com.soltini.app.browser.BrowserController.getInstance(applicationContext)
-                    val resultString = browserController.executeAction(action, ref, text, url)
-                    val truncatedResult = if (resultString.length > 6000) {
-                        resultString.take(6000) + "\n...[Truncated to 6000 chars]"
-                    } else {
-                        resultString
-                    }
-
-                    val resp = JSONObject().apply {
-                        put("status", "success")
-                        put("action", action)
-                        put("result", truncatedResult)
-                        put("guideline", "Always provide concise, spoken replies. Never read raw snapshot text or refs aloud over TTS.")
-                    }
-
-                    geminiLiveManager.sendToolResponse(callId, toolName, resp)
-                    memory2Engine.session.recordToolResult(toolName, "$action outcome: ${truncatedResult.take(120)}")
-                } catch (e: Exception) {
-                    Log.e(TAG, "browser_action execution failed: ${e.message}", e)
-                    geminiLiveManager.sendToolResponse(
-                        callId,
-                        toolName,
-                        JSONObject().apply {
-                            put("status", "error")
-                            put("message", e.message ?: "Failed to execute browser action")
-                        }
-                    )
-                } finally {
-                    val remaining = activeToolCallCount.decrementAndGet()
-                    if (remaining <= 0) {
-                        activeToolCallCount.set(0)
-                    }
-                }
-            }
-            return
-        }
-        // Direct device tools (open_app, lock_device, wake_device, press_back, press_home, press_recents)
-        serviceScope.launch(Dispatchers.IO) {
-            Log.i(TAG, "Executing direct tool: $toolName (callId=$callId)")
-
-            val count = activeToolCallCount.incrementAndGet()
-            if (count == 1) {
-                com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isToolCallActive = true
-            }
-
-            try {
-                val result = agentToolExecutor.executeSuspend(toolName, args)
-                geminiLiveManager.sendToolResponse(callId, toolName, result)
-                memory2Engine.session.recordToolResult(toolName, result.optString("message", "Executed $toolName"))
-            } finally {
-                val remaining = activeToolCallCount.decrementAndGet()
-                if (remaining <= 0) {
-                    activeToolCallCount.set(0)
-                    com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isToolCallActive = false
-                }
-            }
-        }
+        toolRouter.routeToolCall(callId, toolName, args)
     }
 
     // ─── GeminiLiveListener Implementation ───────────────────────────────────
@@ -1947,9 +1039,10 @@ Speak now immediately!"""
             if (it.isHeld) it.release()
         }
 
-        inactivityJob?.cancel()
+        try {
+            sleepStandbyManager.destroy()
+        } catch (_: Exception) {}
         com.soltini.app.agent.AgentStatusBus.listener = null
-        stopWakeListening()
         headsetRouter?.stop()
         audioRecorder.stopRecording()
         audioPlayer.stop()

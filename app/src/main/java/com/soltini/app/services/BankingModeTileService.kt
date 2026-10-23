@@ -10,6 +10,8 @@ import com.soltini.app.security.VoiceBiometricsManager
 import com.soltini.app.security.VoiceUnlockActivity
 import com.soltini.app.settings.AppSettings
 
+import com.soltini.app.voiceprint.UnifiedVoiceAuth
+
 /**
  * BankingModeTileService — Quick Settings Tile for 1-tap toggling of Banking Mode.
  * Allows user to quickly pause/resume Soltini overlays before opening banking apps.
@@ -25,11 +27,11 @@ class BankingModeTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val voiceManager = VoiceBiometricsManager.getInstance(this)
+        val voiceAuth = UnifiedVoiceAuth.getInstance(this)
         val appSettings = AppSettings(this)
 
         // If voice lock is active and not recently verified, require biometric voice authentication
-        if (voiceManager.isEnrolled() && voiceManager.isVoiceLockEnabled() && !voiceManager.isRecentAuthValid()) {
+        if (voiceAuth.isOwnerEnrolled() && voiceAuth.isVoiceLockEnabled() && !voiceAuth.isOwnerVerifiedRecently(30_000L)) {
             val intent = Intent(this, VoiceUnlockActivity::class.java).apply {
                 putExtra(VoiceUnlockActivity.EXTRA_MODE, VoiceUnlockActivity.MODE_VERIFY_BANKING)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

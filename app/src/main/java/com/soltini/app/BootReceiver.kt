@@ -31,19 +31,26 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
 
-        // Accept standard boot + OEM quick-boot variants + screen unlock & power events
+        // Accept only actual cold device boot and package update events (no screen-touch or charger wakes)
         val isBootAction = action == Intent.ACTION_BOOT_COMPLETED ||
                 action == Intent.ACTION_LOCKED_BOOT_COMPLETED ||
-                action == Intent.ACTION_USER_PRESENT ||
-                action == Intent.ACTION_POWER_CONNECTED ||
                 action == "android.intent.action.QUICKBOOT_POWERON" ||          // HTC
                 action == "com.htc.intent.action.QUICKBOOT_POWERON" ||          // HTC (legacy)
-                action == "android.intent.action.MY_PACKAGE_REPLACED" ||        // APK update restart
-                action == "com.soltini.app.RESTART_SERVICE"                     // Custom task removed restart
+                action == "android.intent.action.MY_PACKAGE_REPLACED"           // APK update restart
 
         if (!isBootAction) return
 
-        Log.i(TAG, "Boot/revival event received (action=$action) — ensuring Soltini services are active")
+        Log.i(TAG, "Boot event received (action=$action) — checking assistant configuration")
+
+        val appSettings = com.soltini.app.settings.AppSettings(context)
+        if (!appSettings.isAssistantMasterEnabled) {
+            Log.i(TAG, "Assistant is disabled by user setting — skipping background services on boot")
+            return
+        }
+        if (appSettings.isBedtimeQuietHoursActive()) {
+            Log.i(TAG, "Bedtime quiet hours are currently active — keeping assistant voice service sleeping")
+            return
+        }
 
         // ── Start BackgroundVoiceService ─────────────────────────────────────
         try {

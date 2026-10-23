@@ -468,6 +468,7 @@ fun VoiceLockContent(
                                     identifiedProfileName = "${idResult.profile.name} (${idResult.profile.role.name})"
                                     statusText = "Voice Verified: ${idResult.profile.name}!"
                                     voiceManager.recordSuccessfulAuth()
+                                    com.soltini.app.voiceprint.UnifiedVoiceAuth.getInstance(context).recordSuccessfulAuth()
                                     delay(1000)
                                     onSuccess()
                                 }

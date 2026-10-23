@@ -403,6 +403,24 @@ class BrowserController private constructor(private val appContext: Context) {
                         }
                     }
                 }
+
+                override fun onRenderProcessGone(
+                    view: WebView?,
+                    detail: android.webkit.RenderProcessGoneDetail?
+                ): Boolean {
+                    Log.w(TAG, "Browser WebView render process gone: didCrash=${detail?.didCrash()}")
+                    try {
+                        view?.let {
+                            val parent = it.parent as? android.view.ViewGroup
+                            parent?.removeView(it)
+                            it.destroy()
+                        }
+                        webView = null
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error cleaning up destroyed webview", e)
+                    }
+                    return true
+                }
             }
         }
 

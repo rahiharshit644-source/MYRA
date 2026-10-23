@@ -94,6 +94,10 @@ class WakeWordEngine(
 
         val model = VoskModelManager.model
         if (model == null) {
+            if (!VoskModelManager.hasModelAsset(appContext)) {
+                Log.d(TAG, "Vosk model asset not present; wake-word listener idle.")
+                return
+            }
             // Model still unpacking (first run) - wait for it, then start.
             VoskModelManager.init(appContext, scope)
             if (waitModelJob?.isActive == true) return

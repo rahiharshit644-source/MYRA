@@ -319,7 +319,7 @@ class OverlayService : Service() {
             onPause()
             pauseTimers()
             addJavascriptInterface(bridge, "AriaNative")
-            // WebViewClient to suppress error pages
+            // WebViewClient to suppress error pages and prevent renderer crashes from terminating app
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
@@ -332,8 +332,21 @@ class OverlayService : Service() {
                 ) {
                     android.util.Log.e("OverlayService", "WebView error: ${error?.description} for ${request?.url}")
                 }
+                override fun onRenderProcessGone(
+                    view: WebView?,
+                    detail: android.webkit.RenderProcessGoneDetail?
+                ): Boolean {
+                    android.util.Log.w("OverlayService", "WebView render process gone: didCrash=${detail?.didCrash()}")
+                    try {
+                        view?.let {
+                            (it.parent as? android.view.ViewGroup)?.removeView(it)
+                            it.destroy()
+                        }
+                    } catch (_: Exception) {}
+                    return true
+                }
             }
-            loadUrl("file:///android_asset/avatar/index.html")
+            // Do not load avatar/index.html as 3D display is disabled and causes Chromium renderer crashes on emulators
         }
 
 

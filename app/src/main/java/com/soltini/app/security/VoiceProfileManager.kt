@@ -116,7 +116,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
                 relationship = "Owner / Self",
                 role = ProfileRole.OWNER,
                 allowedResources = VoiceProfile.defaultResourcesForRole(ProfileRole.OWNER),
-                maxAllowedRisk = RiskLevel.OWNER_ONLY
+                maxAllowedRisk = VoiceRiskLevel.OWNER_ONLY
             )
             profilesMap[DEFAULT_OWNER_ID] = owner
             changed = true
@@ -129,7 +129,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
                 relationship = "Mother / Family",
                 role = ProfileRole.FAMILY,
                 allowedResources = VoiceProfile.defaultResourcesForRole(ProfileRole.FAMILY),
-                maxAllowedRisk = RiskLevel.MEDIUM_RISK
+                maxAllowedRisk = VoiceRiskLevel.MEDIUM_RISK
             )
             profilesMap[DEFAULT_FAMILY_ID] = family
             changed = true
@@ -175,7 +175,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
             profileName = newProfile.name,
             actionType = "CREATE_PROFILE",
             resource = ResourceCategory.VOICE_PROFILES_MGMT,
-            risk = RiskLevel.HIGH_RISK,
+            risk = VoiceRiskLevel.HIGH_RISK,
             isSuccess = true,
             reason = "Profile created with role ${enforcedRole.name}"
         )
@@ -197,7 +197,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
             profileName = profile.name,
             actionType = "DELETE_PROFILE",
             resource = ResourceCategory.VOICE_PROFILES_MGMT,
-            risk = RiskLevel.HIGH_RISK,
+            risk = VoiceRiskLevel.HIGH_RISK,
             isSuccess = true,
             reason = "Voice profile and encrypted biometric embedding deleted"
         )
@@ -208,7 +208,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
     fun updatePermissions(
         profileId: String,
         allowedResources: Set<ResourceCategory>,
-        maxRisk: RiskLevel
+        maxRisk: VoiceRiskLevel
     ): Boolean {
         val current = profilesMap[profileId] ?: return false
         // Family profiles can NEVER be granted access to owner private notes/messages/vault
@@ -225,7 +225,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
 
         val updated = current.copy(
             allowedResources = sanitizedResources,
-            maxAllowedRisk = if (current.role != ProfileRole.OWNER && maxRisk == RiskLevel.OWNER_ONLY) RiskLevel.MEDIUM_RISK else maxRisk
+            maxAllowedRisk = if (current.role != ProfileRole.OWNER && maxRisk == VoiceRiskLevel.OWNER_ONLY) VoiceRiskLevel.MEDIUM_RISK else maxRisk
         )
         profilesMap[profileId] = updated
         saveProfiles()
@@ -327,7 +327,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
             profileName = updatedProfile.name,
             actionType = "VOICE_ENROLLMENT_COMPLETE",
             resource = ResourceCategory.VOICE_PROFILES_MGMT,
-            risk = RiskLevel.HIGH_RISK,
+            risk = VoiceRiskLevel.HIGH_RISK,
             isSuccess = true,
             reason = "Voice profile enrolled with ${updatedProfile.sampleCount} phonetic samples and hardware Keystore encryption"
         )
@@ -396,7 +396,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
                 profileName = "Unknown Speaker",
                 actionType = "SPEAKER_IDENTIFICATION",
                 resource = ResourceCategory.GENERAL_ASSISTANT,
-                risk = RiskLevel.LOW_RISK,
+                risk = VoiceRiskLevel.LOW_RISK,
                 isSuccess = false,
                 reason = "Similarity ${"%.2f".format(top.second * 100)}% below threshold"
             )
@@ -418,7 +418,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
                     profileName = "Ambiguous (${top.first.name} vs ${second.first.name})",
                     actionType = "SPEAKER_IDENTIFICATION",
                     resource = ResourceCategory.GENERAL_ASSISTANT,
-                    risk = RiskLevel.HIGH_RISK,
+                    risk = VoiceRiskLevel.HIGH_RISK,
                     isSuccess = false,
                     reason = "Score delta ${"%.3f".format(scoreDiff)} < margin $AMBIGUITY_MARGIN"
                 )
@@ -436,7 +436,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
             profileName = top.first.name,
             actionType = "SPEAKER_IDENTIFICATION",
             resource = ResourceCategory.GENERAL_ASSISTANT,
-            risk = RiskLevel.LOW_RISK,
+            risk = VoiceRiskLevel.LOW_RISK,
             isSuccess = true,
             reason = "Voice verified (${"%.1f".format(top.second * 100)}%)"
         )
@@ -463,7 +463,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
     fun checkPermission(
         profile: VoiceProfile?,
         resource: ResourceCategory,
-        riskLevel: RiskLevel
+        riskLevel: VoiceRiskLevel
     ): PermissionCheckResult {
         if (isEmergencyDisabled()) {
             return PermissionCheckResult.Denied(
@@ -531,8 +531,8 @@ class VoiceProfileManager private constructor(private val context: Context) {
 
         // Evaluate Risk Level
         return when (riskLevel) {
-            RiskLevel.LOW_RISK -> PermissionCheckResult.Allowed(profile)
-            RiskLevel.MEDIUM_RISK -> {
+            VoiceRiskLevel.LOW_RISK -> PermissionCheckResult.Allowed(profile)
+            VoiceRiskLevel.MEDIUM_RISK -> {
                 if (profile.role == ProfileRole.OWNER) {
                     PermissionCheckResult.Allowed(profile)
                 } else {
@@ -542,7 +542,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
                     )
                 }
             }
-            RiskLevel.HIGH_RISK, RiskLevel.OWNER_ONLY -> {
+            VoiceRiskLevel.HIGH_RISK, VoiceRiskLevel.OWNER_ONLY -> {
                 if (profile.role == ProfileRole.OWNER) {
                     PermissionCheckResult.RequiresBiometricPrompt(
                         profile = profile,
@@ -573,7 +573,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
             profileName = "System Admin",
             actionType = if (disabled) "EMERGENCY_DISABLE" else "EMERGENCY_RESTORE",
             resource = ResourceCategory.SETTINGS_SECURITY,
-            risk = RiskLevel.OWNER_ONLY,
+            risk = VoiceRiskLevel.OWNER_ONLY,
             isSuccess = true,
             reason = "Emergency switch toggled to $disabled"
         )
@@ -594,7 +594,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
             profileName = "System Admin",
             actionType = "LOCK_ALL_PROFILES",
             resource = ResourceCategory.VOICE_PROFILES_MGMT,
-            risk = RiskLevel.OWNER_ONLY,
+            risk = VoiceRiskLevel.OWNER_ONLY,
             isSuccess = true,
             reason = "All voice profiles locked"
         )
@@ -612,7 +612,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
             profileName = "System Admin",
             actionType = "WIPE_ALL_BIOMETRICS",
             resource = ResourceCategory.VOICE_PROFILES_MGMT,
-            risk = RiskLevel.OWNER_ONLY,
+            risk = VoiceRiskLevel.OWNER_ONLY,
             isSuccess = true,
             reason = "All encrypted voice embeddings wiped"
         )
@@ -638,7 +638,7 @@ class VoiceProfileManager private constructor(private val context: Context) {
         profileName: String?,
         actionType: String,
         resource: ResourceCategory,
-        risk: RiskLevel,
+        risk: VoiceRiskLevel,
         isSuccess: Boolean,
         reason: String
     ) {

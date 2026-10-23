@@ -15,10 +15,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * or any other setting.
  */
 object ThemeController {
-    private val _mode = MutableStateFlow(MyraThemeMode.CLASSIC)
+    private val _mode = MutableStateFlow(MyraThemeMode.BLUE_GLASS)
     val mode: StateFlow<MyraThemeMode> = _mode.asStateFlow()
 
-    /** Call once early (MainActivity.onCreate). Missing/unknown pref => CLASSIC (existing users unchanged). */
+    /** Call once early (MainActivity.onCreate). Missing/unknown pref => BLUE_GLASS. */
     fun init(context: Context) {
         _mode.value = MyraThemeMode.fromId(AppSettings(context).appThemeMode)
     }

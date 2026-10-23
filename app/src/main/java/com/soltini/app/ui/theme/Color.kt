@@ -109,3 +109,5 @@ val TextSecondary = TextMidGray            // Mid-gray (#8A8A95)
 val RedError = Color(0xFFE5484D)           // Soft coral red
 val GreenLive = Color(0xFF249E6B)          // Crisp mint green for text/icons
 val AmberConnecting = Color(0xFFE59524)    // Soft warm amber
+val AmberWarning = Color(0xFFD97706)       // Warning amber
+val MiuiOrange = Color(0xFFFF6900)         // MIUI orange

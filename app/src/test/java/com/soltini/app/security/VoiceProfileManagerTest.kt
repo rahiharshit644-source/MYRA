@@ -47,7 +47,7 @@ class VoiceProfileManagerTest {
         val created = profileManager.createProfile("Papa", "Father", ProfileRole.OWNER)
         assertEquals("Papa", created.name)
         assertEquals(ProfileRole.FAMILY, created.role)
-        assertEquals(RiskLevel.MEDIUM_RISK, created.maxAllowedRisk)
+        assertEquals(VoiceRiskLevel.MEDIUM_RISK, created.maxAllowedRisk)
         assertFalse(created.allowedResources.contains(ResourceCategory.PERSONAL_NOTES))
         assertFalse(created.allowedResources.contains(ResourceCategory.CALLS_SMS_READ))
         assertFalse(created.allowedResources.contains(ResourceCategory.PRIVATE_FILES_VAULT))
@@ -59,35 +59,35 @@ class VoiceProfileManagerTest {
         assertNotNull(mummy)
 
         // 1. Normal assistant features: Allowed
-        val weatherPerm = profileManager.checkPermission(mummy, ResourceCategory.GENERAL_ASSISTANT, RiskLevel.LOW_RISK)
+        val weatherPerm = profileManager.checkPermission(mummy, ResourceCategory.GENERAL_ASSISTANT, VoiceRiskLevel.LOW_RISK)
         assertTrue("Mummy should be allowed general queries", weatherPerm is PermissionCheckResult.Allowed)
 
-        val musicPerm = profileManager.checkPermission(mummy, ResourceCategory.MEDIA_PLAYBACK, RiskLevel.LOW_RISK)
+        val musicPerm = profileManager.checkPermission(mummy, ResourceCategory.MEDIA_PLAYBACK, VoiceRiskLevel.LOW_RISK)
         assertTrue("Mummy should be allowed media playback", musicPerm is PermissionCheckResult.Allowed)
 
-        val calcPerm = profileManager.checkPermission(mummy, ResourceCategory.UTILITIES, RiskLevel.LOW_RISK)
+        val calcPerm = profileManager.checkPermission(mummy, ResourceCategory.UTILITIES, VoiceRiskLevel.LOW_RISK)
         assertTrue("Mummy should be allowed calculator/utilities", calcPerm is PermissionCheckResult.Allowed)
 
         // 2. Medium risk actions: Require Confirmation
-        val alarmPerm = profileManager.checkPermission(mummy, ResourceCategory.ALARMS_REMINDERS, RiskLevel.MEDIUM_RISK)
+        val alarmPerm = profileManager.checkPermission(mummy, ResourceCategory.ALARMS_REMINDERS, VoiceRiskLevel.MEDIUM_RISK)
         assertTrue("Mummy should be allowed with confirmation for medium risk", alarmPerm is PermissionCheckResult.AllowedWithConfirmation)
 
         // 3. Owner Private Data: Strictly Denied & Privacy Protected
-        val notesPerm = profileManager.checkPermission(mummy, ResourceCategory.PERSONAL_NOTES, RiskLevel.OWNER_ONLY)
+        val notesPerm = profileManager.checkPermission(mummy, ResourceCategory.PERSONAL_NOTES, VoiceRiskLevel.OWNER_ONLY)
         assertTrue("Mummy must be denied access to private notes", notesPerm is PermissionCheckResult.Denied)
         val notesDenied = notesPerm as PermissionCheckResult.Denied
         assertTrue(notesDenied.isPrivacyProtected)
         assertEquals("Ye personal information hai aur aapke profile ke liye available nahi hai.", notesDenied.reason)
 
-        val messagesPerm = profileManager.checkPermission(mummy, ResourceCategory.CALLS_SMS_READ, RiskLevel.OWNER_ONLY)
+        val messagesPerm = profileManager.checkPermission(mummy, ResourceCategory.CALLS_SMS_READ, VoiceRiskLevel.OWNER_ONLY)
         assertTrue("Mummy must be denied access to private messages", messagesPerm is PermissionCheckResult.Denied)
         val msgDenied = messagesPerm as PermissionCheckResult.Denied
         assertEquals("Ye personal information hai aur aapke profile ke liye available nahi hai.", msgDenied.reason)
 
-        val vaultPerm = profileManager.checkPermission(mummy, ResourceCategory.PRIVATE_FILES_VAULT, RiskLevel.OWNER_ONLY)
+        val vaultPerm = profileManager.checkPermission(mummy, ResourceCategory.PRIVATE_FILES_VAULT, VoiceRiskLevel.OWNER_ONLY)
         assertTrue("Mummy must be denied access to vault", vaultPerm is PermissionCheckResult.Denied)
 
-        val profileMgmtPerm = profileManager.checkPermission(mummy, ResourceCategory.VOICE_PROFILES_MGMT, RiskLevel.OWNER_ONLY)
+        val profileMgmtPerm = profileManager.checkPermission(mummy, ResourceCategory.VOICE_PROFILES_MGMT, VoiceRiskLevel.OWNER_ONLY)
         assertTrue("Mummy cannot manage voice profiles", profileMgmtPerm is PermissionCheckResult.Denied)
     }
 
@@ -97,25 +97,25 @@ class VoiceProfileManagerTest {
         assertNotNull(owner)
 
         // Low risk: Allowed
-        val weatherPerm = profileManager.checkPermission(owner, ResourceCategory.GENERAL_ASSISTANT, RiskLevel.LOW_RISK)
+        val weatherPerm = profileManager.checkPermission(owner, ResourceCategory.GENERAL_ASSISTANT, VoiceRiskLevel.LOW_RISK)
         assertTrue(weatherPerm is PermissionCheckResult.Allowed)
 
         // Medium risk: Allowed for owner
-        val alarmPerm = profileManager.checkPermission(owner, ResourceCategory.ALARMS_REMINDERS, RiskLevel.MEDIUM_RISK)
+        val alarmPerm = profileManager.checkPermission(owner, ResourceCategory.ALARMS_REMINDERS, VoiceRiskLevel.MEDIUM_RISK)
         assertTrue(alarmPerm is PermissionCheckResult.Allowed)
 
         // High Risk / Owner Only (e.g. Vault, Profile Management): Requires BiometricPrompt
-        val vaultPerm = profileManager.checkPermission(owner, ResourceCategory.PRIVATE_FILES_VAULT, RiskLevel.OWNER_ONLY)
+        val vaultPerm = profileManager.checkPermission(owner, ResourceCategory.PRIVATE_FILES_VAULT, VoiceRiskLevel.OWNER_ONLY)
         assertTrue("Owner high risk/vault requires BiometricPrompt", vaultPerm is PermissionCheckResult.RequiresBiometricPrompt)
 
         // Financial payments: Always requires biometric prompt
-        val paymentPerm = profileManager.checkPermission(owner, ResourceCategory.FINANCIAL_PAYMENTS, RiskLevel.OWNER_ONLY)
+        val paymentPerm = profileManager.checkPermission(owner, ResourceCategory.FINANCIAL_PAYMENTS, VoiceRiskLevel.OWNER_ONLY)
         assertTrue(paymentPerm is PermissionCheckResult.RequiresBiometricPrompt)
     }
 
     @Test
     fun testUnknownSpeakerRejection() {
-        val unknownPerm = profileManager.checkPermission(null, ResourceCategory.GENERAL_ASSISTANT, RiskLevel.LOW_RISK)
+        val unknownPerm = profileManager.checkPermission(null, ResourceCategory.GENERAL_ASSISTANT, VoiceRiskLevel.LOW_RISK)
         assertTrue(unknownPerm is PermissionCheckResult.Denied)
         val denied = unknownPerm as PermissionCheckResult.Denied
         assertEquals("Voice verify nahi hui. Password enter karein.", denied.reason)
@@ -127,7 +127,7 @@ class VoiceProfileManagerTest {
         assertTrue(profileManager.isEmergencyDisabled())
 
         val owner = profileManager.getOwnerProfile()
-        val perm = profileManager.checkPermission(owner, ResourceCategory.GENERAL_ASSISTANT, RiskLevel.LOW_RISK)
+        val perm = profileManager.checkPermission(owner, ResourceCategory.GENERAL_ASSISTANT, VoiceRiskLevel.LOW_RISK)
         assertTrue("When emergency is active, all requests must be denied", perm is PermissionCheckResult.Denied)
 
         // Restore

@@ -136,15 +136,15 @@ class MyraOrchestrator private constructor(
             val confIntent = fileSafetyManager.checkUserUtterance(cleanedInput)
             if (confIntent == com.soltini.app.storage.UserConfirmationIntent.AFFIRMATIVE) {
                 // Voice-lock security check for destructive file actions
-                val voiceManager = com.soltini.app.security.VoiceBiometricsManager.getInstance(context)
-                if (voiceManager.isEnrolled() && voiceManager.isVoiceLockEnabled() && !voiceManager.isRecentAuthValid()) {
-                    val authResult = voiceManager.recordAndVerify(durationMs = 2500L)
+                val voiceAuth = com.soltini.app.voiceprint.UnifiedVoiceAuth.getInstance(context)
+                if (voiceAuth.isOwnerEnrolled() && voiceAuth.isVoiceLockEnabled() && !voiceAuth.isOwnerVerifiedRecently(30_000L)) {
+                    val authResult = voiceAuth.recordAndVerifyOwnerVoice(durationMs = 2500L)
                     if (!authResult.isMatch) {
                         val failPlan = OrchestratorPlan(
                             userGoal = cleanedInput,
                             intentType = IntentType.ACTIONABLE,
                             status = PlanStatus.FAILED,
-                            finalResponse = "Security Alert Boss: Voice verification fail ho gayi (${(authResult.similarity * 100).toInt()}% match vs ${(com.soltini.app.security.VoiceBiometricsManager.DEFAULT_THRESHOLD * 100).toInt()}% required). Destructive file action cancel kar diya gaya hai."
+                            finalResponse = "Security Alert Boss: Voice verification fail ho gayi [${authResult.engine}] (${(authResult.similarity * 100).toInt()}% match vs ${(authResult.threshold * 100).toInt()}% required). Destructive file action cancel kar diya gaya hai."
                         )
                         return@withContext OrchestratorResult(
                             plan = failPlan,
@@ -2133,42 +2133,42 @@ Respond directly to Boss with genuine human warmth, accuracy, and intelligence."
 
     private fun classifyResourceAndRisk(
         input: String
-    ): Pair<com.soltini.app.security.ResourceCategory, com.soltini.app.security.RiskLevel> {
+    ): Pair<com.soltini.app.security.ResourceCategory, com.soltini.app.security.VoiceRiskLevel> {
         val lower = input.lowercase()
         return when {
             lower.contains("vault") || lower.contains("secret file") || lower.contains("private file") ->
-                Pair(com.soltini.app.security.ResourceCategory.PRIVATE_FILES_VAULT, com.soltini.app.security.RiskLevel.OWNER_ONLY)
+                Pair(com.soltini.app.security.ResourceCategory.PRIVATE_FILES_VAULT, com.soltini.app.security.VoiceRiskLevel.OWNER_ONLY)
 
             lower.contains("note") || lower.contains("mere notes") || lower.contains("harshit ke notes") ->
-                Pair(com.soltini.app.security.ResourceCategory.PERSONAL_NOTES, com.soltini.app.security.RiskLevel.OWNER_ONLY)
+                Pair(com.soltini.app.security.ResourceCategory.PERSONAL_NOTES, com.soltini.app.security.VoiceRiskLevel.OWNER_ONLY)
 
             lower.contains("message dikhao") || lower.contains("messages dikhao") || lower.contains("sms dikhao") ||
             lower.contains("whatsapp chats") || lower.contains("harshit ke message") || lower.contains("read message") || lower.contains("read sms") ->
-                Pair(com.soltini.app.security.ResourceCategory.CALLS_SMS_READ, com.soltini.app.security.RiskLevel.OWNER_ONLY)
+                Pair(com.soltini.app.security.ResourceCategory.CALLS_SMS_READ, com.soltini.app.security.VoiceRiskLevel.OWNER_ONLY)
 
             lower.contains("voice profile") || lower.contains("add user") || lower.contains("security settings") || lower.contains("api key") ->
-                Pair(com.soltini.app.security.ResourceCategory.VOICE_PROFILES_MGMT, com.soltini.app.security.RiskLevel.OWNER_ONLY)
+                Pair(com.soltini.app.security.ResourceCategory.VOICE_PROFILES_MGMT, com.soltini.app.security.VoiceRiskLevel.OWNER_ONLY)
 
             lower.contains("pay") || lower.contains("payment") || lower.contains("upi") || lower.contains("transfer money") ->
-                Pair(com.soltini.app.security.ResourceCategory.FINANCIAL_PAYMENTS, com.soltini.app.security.RiskLevel.OWNER_ONLY)
+                Pair(com.soltini.app.security.ResourceCategory.FINANCIAL_PAYMENTS, com.soltini.app.security.VoiceRiskLevel.OWNER_ONLY)
 
             lower.contains("gaana") || lower.contains("song") || lower.contains("music") || lower.contains("bajao") ->
-                Pair(com.soltini.app.security.ResourceCategory.MEDIA_PLAYBACK, com.soltini.app.security.RiskLevel.LOW_RISK)
+                Pair(com.soltini.app.security.ResourceCategory.MEDIA_PLAYBACK, com.soltini.app.security.VoiceRiskLevel.LOW_RISK)
 
             lower.contains("mausam") || lower.contains("weather") || lower.contains("time") || lower.contains("samay") || lower.contains("tarikh") || lower.contains("date") ->
-                Pair(com.soltini.app.security.ResourceCategory.GENERAL_ASSISTANT, com.soltini.app.security.RiskLevel.LOW_RISK)
+                Pair(com.soltini.app.security.ResourceCategory.GENERAL_ASSISTANT, com.soltini.app.security.VoiceRiskLevel.LOW_RISK)
 
             lower.contains("calculator") || lower.contains("calculate") || lower.contains("hisab") ->
-                Pair(com.soltini.app.security.ResourceCategory.UTILITIES, com.soltini.app.security.RiskLevel.LOW_RISK)
+                Pair(com.soltini.app.security.ResourceCategory.UTILITIES, com.soltini.app.security.VoiceRiskLevel.LOW_RISK)
 
             lower.contains("reminder") || lower.contains("alarm") ->
-                Pair(com.soltini.app.security.ResourceCategory.ALARMS_REMINDERS, com.soltini.app.security.RiskLevel.MEDIUM_RISK)
+                Pair(com.soltini.app.security.ResourceCategory.ALARMS_REMINDERS, com.soltini.app.security.VoiceRiskLevel.MEDIUM_RISK)
 
             lower.contains("message bhejo") || lower.contains("sms bhejo") || lower.contains("call karo") || lower.contains("phone lagao") ->
-                Pair(com.soltini.app.security.ResourceCategory.CALLS_SMS_SEND, com.soltini.app.security.RiskLevel.HIGH_RISK)
+                Pair(com.soltini.app.security.ResourceCategory.CALLS_SMS_SEND, com.soltini.app.security.VoiceRiskLevel.HIGH_RISK)
 
             else ->
-                Pair(com.soltini.app.security.ResourceCategory.GENERAL_ASSISTANT, com.soltini.app.security.RiskLevel.LOW_RISK)
+                Pair(com.soltini.app.security.ResourceCategory.GENERAL_ASSISTANT, com.soltini.app.security.VoiceRiskLevel.LOW_RISK)
         }
     }
 }

@@ -63,7 +63,13 @@ val BlueTextPrimary = Color(0xFF0F2547)
 val BlueTextSecondary = Color(0xFF5F7594)
 
 val BlueGlassBackgroundBrush: Brush = Brush.verticalGradient(
-    colors = listOf(Color(0xFFBFE1FC), Color(0xFFD6ECFC), Color(0xFFE7F5FD), Color(0xFFD3EAFB))
+    colors = listOf(
+        Color(0xFFAED8FB),
+        Color(0xFFC7E6FD),
+        Color(0xFFE0F2FE),
+        Color(0xFFD4ECFC),
+        Color(0xFFBCE1FA)
+    )
 )
 
 val BlueGlassTokens = MyraTokens(
@@ -71,18 +77,18 @@ val BlueGlassTokens = MyraTokens(
     backgroundBrush = BlueGlassBackgroundBrush,
     accent = BluePrimary,
     accentSecondary = BlueElectricCyan,
-    accentGradient = Brush.linearGradient(listOf(Color(0xFF2368F0), Color(0xFF3FA3FF))),
-    accentHorizontalGradient = Brush.horizontalGradient(listOf(Color(0xFF2368F0), Color(0xFF3E9BFD))),
+    accentGradient = Brush.linearGradient(listOf(Color(0xFF1E6FFB), Color(0xFF00C6FF))),
+    accentHorizontalGradient = Brush.horizontalGradient(listOf(Color(0xFF1E6FFB), Color(0xFF00E5FF))),
     textPrimary = BlueTextPrimary,
     textSecondary = BlueTextSecondary,
-    cardColor = Color(0xCCFFFFFF),                     // ~80% white: frosted, lets the blue show through
-    cardBorder = BorderStroke(1.dp, Color(0xE6FFFFFF)), // bright white glass edge
-    shadowColor = Color(0xFF5B9BE8),
-    cardCornerRadius = 22.dp,
-    subtleSurface = Color(0x99FFFFFF),
+    cardColor = Color(0xD6FFFFFF),                     // ~84% crystalline frosted glass
+    cardBorder = BorderStroke(1.2.dp, Color(0xF2FFFFFF)), // bright specular edge
+    shadowColor = Color(0xFF3B82F6),
+    cardCornerRadius = 24.dp,
+    subtleSurface = Color(0xAAFFFFFF),
     switchOnTrack = BluePrimary,
-    switchOffTrack = Color(0xFFCBD8EE),
-    navUnselected = Color(0xFF5B6E8C)
+    switchOffTrack = Color(0xFFC2D6EE),
+    navUnselected = Color(0xFF476082)
 )
 
 fun tokensFor(mode: MyraThemeMode): MyraTokens = when (mode) {

@@ -31,6 +31,10 @@ object VoskModelManager {
 
     private val isInitializing = AtomicBoolean(false)
 
+    fun hasModelAsset(context: Context): Boolean = try {
+        !context.applicationContext.assets.list(ASSET_DIR).isNullOrEmpty()
+    } catch (_: Exception) { false }
+
     fun init(context: Context, scope: CoroutineScope) {
         if (model != null) return
         if (!isInitializing.compareAndSet(false, true)) return
@@ -38,11 +42,8 @@ object VoskModelManager {
         scope.launch(Dispatchers.IO) {
             try {
                 val appContext = context.applicationContext
-                val hasAsset = try {
-                    !appContext.assets.list(ASSET_DIR).isNullOrEmpty()
-                } catch (_: Exception) { false }
-                if (!hasAsset) {
-                    Log.e(TAG, "assets/$ASSET_DIR is missing - copy the model folder into app/src/main/assets/. Wake word disabled.")
+                if (!hasModelAsset(appContext)) {
+                    Log.w(TAG, "assets/$ASSET_DIR is missing - wake word disabled.")
                     return@launch
                 }
 

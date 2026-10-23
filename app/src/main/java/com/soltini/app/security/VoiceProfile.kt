@@ -14,10 +14,10 @@ enum class ProfileRole {
 }
 
 /**
- * RiskLevel
- * Granular classification of command and action sensitivity.
+ * VoiceRiskLevel
+ * Granular classification of command and action sensitivity for voice profiles.
  */
-enum class RiskLevel {
+enum class VoiceRiskLevel {
     LOW_RISK,       // Information queries, time, weather, calculator
     MEDIUM_RISK,    // Playing music, setting alarms, general app launch
     HIGH_RISK,      // Sending messages, making phone calls, smart home toggles
@@ -57,7 +57,7 @@ data class VoiceProfile(
     val enrolledAt: Long = 0L,
     val sampleCount: Int = 0,
     val allowedResources: Set<ResourceCategory> = defaultResourcesForRole(role),
-    val maxAllowedRisk: RiskLevel = defaultRiskForRole(role),
+    val maxAllowedRisk: VoiceRiskLevel = defaultRiskForRole(role),
     val isLocked: Boolean = false
 ) {
     companion object {
@@ -76,10 +76,10 @@ data class VoiceProfile(
             )
         }
 
-        fun defaultRiskForRole(role: ProfileRole): RiskLevel = when (role) {
-            ProfileRole.OWNER -> RiskLevel.OWNER_ONLY
-            ProfileRole.FAMILY -> RiskLevel.MEDIUM_RISK
-            ProfileRole.GUEST -> RiskLevel.LOW_RISK
+        fun defaultRiskForRole(role: ProfileRole): VoiceRiskLevel = when (role) {
+            ProfileRole.OWNER -> VoiceRiskLevel.OWNER_ONLY
+            ProfileRole.FAMILY -> VoiceRiskLevel.MEDIUM_RISK
+            ProfileRole.GUEST -> VoiceRiskLevel.LOW_RISK
         }
 
         fun fromJsonObject(json: JSONObject): VoiceProfile {
@@ -108,7 +108,7 @@ data class VoiceProfile(
             }
 
             val maxRisk = try {
-                RiskLevel.valueOf(json.optString("max_allowed_risk", defaultRiskForRole(role).name))
+                VoiceRiskLevel.valueOf(json.optString("max_allowed_risk", defaultRiskForRole(role).name))
             } catch (_: Exception) { defaultRiskForRole(role) }
 
             return VoiceProfile(
@@ -193,7 +193,7 @@ data class VoiceAuditLogEntry(
     val profileName: String?,
     val actionType: String,
     val resourceCategory: ResourceCategory,
-    val riskLevel: RiskLevel,
+    val riskLevel: VoiceRiskLevel,
     val isSuccess: Boolean,
     val reason: String
 ) {
@@ -220,8 +220,8 @@ data class VoiceAuditLogEntry(
                 ResourceCategory.valueOf(json.optString("resource", ResourceCategory.GENERAL_ASSISTANT.name))
             } catch (_: Exception) { ResourceCategory.GENERAL_ASSISTANT },
             riskLevel = try {
-                RiskLevel.valueOf(json.optString("risk_level", RiskLevel.LOW_RISK.name))
-            } catch (_: Exception) { RiskLevel.LOW_RISK },
+                VoiceRiskLevel.valueOf(json.optString("risk_level", VoiceRiskLevel.LOW_RISK.name))
+            } catch (_: Exception) { VoiceRiskLevel.LOW_RISK },
             isSuccess = json.optBoolean("is_success", false),
             reason = json.optString("reason", "")
         )
