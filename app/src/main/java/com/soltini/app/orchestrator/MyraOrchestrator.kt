@@ -130,6 +130,30 @@ class MyraOrchestrator private constructor(
         Log.i(TAG, "─── ORCHESTRATOR START: \"$cleanedInput\" ───")
         onStatusUpdate?.invoke("Analyzing request...")
 
+        // ─── ULTRA-FAST SEMANTIC CACHE HIT (<50ms, inspired by GPTCache) ──────
+        val cacheEngine = com.soltini.app.cache.JarvisSemanticCache.getInstance(context)
+        when (val cacheHit = cacheEngine.tryExecuteLocally(cleanedInput)) {
+            is com.soltini.app.cache.JarvisSemanticCache.CacheResult.Hit -> {
+                Log.i(TAG, "⚡ SEMANTIC CACHE HIT [${cacheHit.intent}] in ${System.currentTimeMillis() - startTime}ms")
+                val cachePlan = OrchestratorPlan(
+                    userGoal = cleanedInput,
+                    intentType = IntentType.ACTIONABLE,
+                    status = PlanStatus.COMPLETED,
+                    finalResponse = cacheHit.message
+                )
+                return@withContext OrchestratorResult(
+                    plan = cachePlan,
+                    isSuccess = true,
+                    responseText = cacheHit.message,
+                    memoryUpdated = false,
+                    executionDurationMs = System.currentTimeMillis() - startTime
+                )
+            }
+            com.soltini.app.cache.JarvisSemanticCache.CacheResult.Miss -> {
+                // Cache miss — proceed to standard cognitive and agent loops
+            }
+        }
+
         // SAFETY CHECK: Intercept confirmations for destructive file actions
         val pending = fileSafetyManager.getLatestPending()
         if (pending != null) {

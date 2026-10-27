@@ -429,8 +429,9 @@ STORAGE INTELLIGENCE, FILE MANAGER & RAG KNOWLEDGE BASE:
   * Duplicate files: "Duplicate files check karo" -> action='find_duplicates'
   * Undo edit: "Last file edit undo karo" -> action='undo'
 
-AUTONOMOUS HUMAN PHONE OPERATOR (Universal Task Execution):
-- trigger_automation: Universal autonomous operator. When $addr gives a goal that requires doing things on the phone like a human across apps (e.g. "Zomato se pizza order karne ke liye options dikhao", "Amazon pe shoes search karo", "Instagram pe kisi ko dhoondo", "Settings me Bluetooth on karo", "Google form bharo"), call `trigger_automation(request=...)`. The autonomous operator will take control, observe screens, click, type, scroll, and complete the goal!
+AUTONOMOUS J.A.R.V.I.S. PROTOCOLS & PHONE OPERATOR:
+- execute_protocol: Autonomous multi-step goal coordinator. When $addr gives a compound or multi-step goal (e.g. "Morning sync briefing do", "Spotify pe lofi beats chalao aur alarm 7 baje set karo", "Deep focus activate karo", "Zomato se pizza options dikhao aur WhatsApp pe batao", "Settings me Wi-Fi band karke screen lock karo"), call `execute_protocol(protocol_name=..., goal=...)`. The autonomous protocol engine will decompose the goal, trigger live HUD telemetry, execute each step across apps and settings, and confirm when 100% finished!
+- trigger_automation: Universal autonomous operator. When $addr gives a goal that requires doing things on the phone like a human across apps, call `trigger_automation(request=...)`.
 - browser_action: FULL-CONTROL In-App Android WebView Agent (snapshot + refs pattern). Kisi website par kuch dekhna, search, login, password fill, ID create ya A-to-Z form fill karna ho to `browser_action` use karo.
   * Supported Actions: 'open', 'snapshot', 'click', 'fill', 'select' (dropdowns), 'check'/'uncheck' (checkboxes), 'clear', 'press' (Enter/Tab), 'scroll', 'back', 'read', 'evaluate' (custom JS), 'save_login', 'get_login'.
   * Full Authority: You have full permission to fill usernames, emails, passwords, select dropdowns, toggle checkboxes, submit forms, login, and create accounts on $addr's request!
@@ -1072,6 +1073,69 @@ TASK EXECUTION & MULTI-TASKING:
                                     put("name", "scroll_up")
                                     put("description", "Scrolls up the current screen content.")
                                     put("parameters", JSONObject().apply { put("type", "OBJECT"); put("properties", JSONObject()) })
+                                })
+
+                                // execute_protocol
+                                put(JSONObject().apply {
+                                    put("name", "execute_protocol")
+                                    put("description", "Executes an autonomous multi-step JARVIS protocol or complex goal across apps and phone settings (e.g. morning briefing, deep focus session, workout music + alarm, app switches, shopping options, multi-step forms). The engine decomposes the goal, streams HUD telemetry, and completes all steps.")
+                                    put("parameters", JSONObject().apply {
+                                        put("type", "OBJECT")
+                                        put("properties", JSONObject().apply {
+                                            put("protocol_name", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "Tactical name for the protocol, e.g. 'Protocol: Morning Sync' or 'Protocol: Deep Focus'.")
+                                            })
+                                            put("goal", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "The high-level goal or compound multi-step instructions.")
+                                            })
+                                        })
+                                        put("required", JSONArray().apply { put("goal") })
+                                    })
+                                })
+
+                                // run_executive_briefing
+                                put(JSONObject().apply {
+                                    put("name", "run_executive_briefing")
+                                    put("description", "Synthesizes real-time device vitals (battery, weather, alarms, connectivity status) and delivers an authentic Tony Stark style J.A.R.V.I.S. morning or executive status report.")
+                                    put("parameters", JSONObject().apply { put("type", "OBJECT"); put("properties", JSONObject()) })
+                                })
+
+                                // execute_with_reflection
+                                put(JSONObject().apply {
+                                    put("name", "execute_with_reflection")
+                                    put("description", "Executes a phone screen action with MobileAgent-style pre/post visual state verification. If a tap or click misses, it automatically self-recovers.")
+                                    put("parameters", JSONObject().apply {
+                                        put("type", "OBJECT")
+                                        put("properties", JSONObject().apply {
+                                            put("action", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "The action to run, e.g. 'click_element' or 'tap_screen'.")
+                                            })
+                                            put("target_text", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "The text of the target element to verify and click.")
+                                            })
+                                        })
+                                        put("required", JSONArray().apply { put("action"); put("target_text") })
+                                    })
+                                })
+
+                                // control_sentry_mode
+                                put(JSONObject().apply {
+                                    put("name", "control_sentry_mode")
+                                    put("description", "Controls the Iron Man Sentry security defense mode. Arms or disarms the physical device motion tripwire, or checks perimeter security status.")
+                                    put("parameters", JSONObject().apply {
+                                        put("type", "OBJECT")
+                                        put("properties", JSONObject().apply {
+                                            put("action", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "Action to perform: 'arm', 'disarm', 'status', or 'toggle'.")
+                                            })
+                                        })
+                                        put("required", JSONArray().apply { put("action") })
+                                    })
                                 })
 
                                 // trigger_automation

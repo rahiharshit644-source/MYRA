@@ -523,14 +523,19 @@ class VoiceToolRouter(
             return
         }
 
-        // ─── 18. Trigger MYRA Orchestrator Automation (Instant & Multi-Task) ───────
-        if (toolName == "trigger_automation") {
-            val request = args.optString("request", "").trim()
+        // ─── 18. Trigger J.A.R.V.I.S. Autonomous Protocol / Automation ────────────
+        if (toolName == "trigger_automation" || toolName == "execute_protocol") {
+            val request = args.optString("request", "").ifBlank {
+                args.optString("goal", "").ifBlank {
+                    args.optString("protocol_name", "")
+                }
+            }.trim()
+            val protocolName = args.optString("protocol_name", "Autonomous Protocol").ifBlank { "Autonomous Protocol" }
             if (request.isBlank()) {
-                respondError(callId, toolName, "Request cannot be empty.")
+                respondError(callId, toolName, "Request or goal cannot be empty.")
                 return
             }
-            Log.i(TAG, "Triggering immediate multi-task automation for request: \"$request\"")
+            Log.i(TAG, "Triggering autonomous protocol: '$protocolName' for request: \"$request\"")
             onAppendUserMessage(request)
 
             serviceScope.launch(Dispatchers.IO) {
@@ -540,7 +545,15 @@ class VoiceToolRouter(
                 }
                 try {
                     val subtasks = splitCompoundRequest(request)
-                    Log.i(TAG, "Executing ${subtasks.size} subtask(s) concurrently in parallel: $subtasks")
+                    Log.i(TAG, "Executing ${subtasks.size} subtask(s) for protocol '$protocolName': $subtasks")
+
+                    // Update live UI protocol HUD
+                    com.soltini.app.protocol.AutoTaskProtocolManager.getInstance(context).launchProtocol(
+                        name = protocolName,
+                        goal = request,
+                        explicitSteps = subtasks,
+                        geminiLiveManager = geminiLiveManager
+                    )
 
                     val results = if (subtasks.size > 1) {
                         subtasks.map { subtask ->
@@ -554,31 +567,31 @@ class VoiceToolRouter(
 
                     val finalOutcome = results.joinToString(" | ")
                     onAppendAgentMessage(finalOutcome)
-                    Log.i(TAG, "All automation tasks completed: $finalOutcome")
+                    Log.i(TAG, "All protocol tasks completed: $finalOutcome")
 
-                    // Send completed tool response IMMEDIATELY with the real outcome!
+                    // Send completed tool response with outcome in true JARVIS style
                     respondOk(callId, toolName) {
                         put("status", "completed")
                         put("outcome", finalOutcome)
                         put("tasks_completed", subtasks.size)
                         put(
                             "instruction",
-                            "Task is completely finished right now! Tell Boss in Hindi/Hinglish in 1 concise line that everything requested is done: '$finalOutcome'. Do NOT say tasks are running in background or pending."
+                            "Protocol is completed! Tell Boss in JARVIS demeanor in Hindi/Hinglish in 1 concise line that everything requested is done: '$finalOutcome'. Do NOT say tasks are pending."
                         )
                     }
 
                     geminiLiveManager.sendClientContent(
-                        "[SYSTEM NOTIFICATION: Task completed for: \"$request\". Outcome: $finalOutcome. Speak directly to Boss in Hindi/Hinglish to share that it is completely done!]"
+                        "[SYSTEM NOTIFICATION: Protocol '$protocolName' completed for: \"$request\". Outcome: $finalOutcome. Speak directly to Boss in Hindi/Hinglish in JARVIS demeanor to confirm completion!]"
                     )
                 } catch (e: Exception) {
-                    Log.e(TAG, "Automation failed: ${e.message}", e)
-                    onAppendAgentMessage("Task note: ${e.message}")
+                    Log.e(TAG, "Protocol execution failed: ${e.message}", e)
+                    onAppendAgentMessage("Protocol note: ${e.message}")
                     respondOk(callId, toolName) {
                         put("status", "completed")
                         put("outcome", "Tasks executed.")
                         put(
                             "instruction",
-                            "Task is executed. Tell Boss in 1 concise line: 'Ji Boss, task complete ho gaya hai.'"
+                            "Protocol completed. Tell Boss in 1 concise line: 'Ji Boss, saare tasks execute kar diye gaye hain.'"
                         )
                     }
                 } finally {
@@ -588,6 +601,85 @@ class VoiceToolRouter(
                         com.soltini.app.agent.SoltiniAccessibilityService.getInstance()?.isToolCallActive = false
                     }
                 }
+            }
+            return
+        }
+
+        // ─── 18B. Run J.A.R.V.I.S. Executive Daily Telemetry Briefing ─────────────
+        if (toolName == "run_executive_briefing") {
+            Log.i(TAG, "Generating J.A.R.V.I.S. Executive Telemetry Briefing")
+            com.soltini.app.audio.JarvisSoundEngine.playTacticalBlip()
+
+            serviceScope.launch(Dispatchers.IO) {
+                try {
+                    val userName = appSettings.currentAddressName().ifBlank { "Sir" }
+                    val briefingText = com.soltini.app.briefing.JarvisExecutiveBriefing.synthesizeBriefing(context, userName)
+                    com.soltini.app.audio.JarvisSoundEngine.playTaskSuccessChime()
+                    respondOk(callId, toolName) {
+                        put("status", "success")
+                        put("briefing", briefingText)
+                        put(
+                            "instruction",
+                            "Deliver this executive briefing to $userName in calm, ultra-competent J.A.R.V.I.S. demeanor: '$briefingText'"
+                        )
+                    }
+                    geminiLiveManager.sendClientContent(
+                        "[EXECUTIVE TELEMETRY READY: $briefingText. Present this status report to $userName in J.A.R.V.I.S. voice!]"
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Executive briefing generation error: ${e.message}", e)
+                    respondError(callId, toolName, "Unable to synthesize briefing: ${e.message}")
+                }
+            }
+            return
+        }
+
+        // ─── 18C. Execute With MobileAgent Reflection & Self-Correction ──────────
+        if (toolName == "execute_with_reflection") {
+            val action = args.optString("action", "click_element")
+            val targetText = args.optString("target_text", "")
+            val reflectionEngine = com.soltini.app.agent.MobileAgentReflectionEngine(context, agentToolExecutor)
+
+            serviceScope.launch(Dispatchers.IO) {
+                com.soltini.app.audio.JarvisSoundEngine.playTacticalBlip()
+                val verdict = reflectionEngine.executeWithReflection(
+                    actionName = action,
+                    actionParams = mapOf("text" to targetText),
+                    expectedTargetText = targetText
+                )
+                if (verdict.isSuccessful) {
+                    com.soltini.app.audio.JarvisSoundEngine.playTaskSuccessChime()
+                } else {
+                    com.soltini.app.audio.JarvisSoundEngine.playWarningAlert()
+                }
+                respondOk(callId, toolName) {
+                    put("success", verdict.isSuccessful)
+                    put("state_changed", verdict.stateChanged)
+                    put("retry_attempted", verdict.retryAttempted)
+                    put("message", verdict.message)
+                }
+            }
+            return
+        }
+
+        // ─── 18D. Control Iron Man Sentry Security Mode ──────────────────────────
+        if (toolName == "control_sentry_mode") {
+            val action = args.optString("action", "toggle").lowercase().trim()
+            val sentryEngine = com.soltini.app.security.JarvisSentryEngine.getInstance(context)
+            val resultMessage = when (action) {
+                "arm", "activate", "on" -> sentryEngine.armSentry(vocalFeedback = false)
+                "disarm", "deactivate", "off" -> sentryEngine.disarmSentry(vocalFeedback = false)
+                "status" -> {
+                    val st = sentryEngine.sentryStatus.value
+                    "Sentry status: ${st.statusText}, breach count: ${st.breachCount}"
+                }
+                else -> sentryEngine.toggleSentry()
+            }
+            respondOk(callId, toolName) {
+                put("status", "success")
+                put("sentry_action", action)
+                put("message", resultMessage)
+                put("instruction", "Inform Boss in crisp J.A.R.V.I.S. voice: '$resultMessage'")
             }
             return
         }

@@ -71,6 +71,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -203,6 +204,15 @@ fun VoiceScreen(
                     onToggleMute = {
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         viewModel.toggleMute()
+                    }
+                )
+            }
+
+            // Autonomous Protocol Runner (J.A.R.V.I.S. Auto-Task Engine)
+            item {
+                com.soltini.app.ui.components.AutonomousProtocolCard(
+                    onLaunchCustom = { goal ->
+                        viewModel.sendUserMessage("Execute protocol: $goal")
                     }
                 )
             }
@@ -616,22 +626,27 @@ private fun HeroOrbGlassCard(
         else -> MyraOrbState.LISTENING
     }
 
-    val statusTitle = when (orbState) {
-        MyraOrbState.PAUSED -> "Session Paused"
-        MyraOrbState.CONNECTING -> "Connecting…"
-        MyraOrbState.OFF -> "Myra is OFF"
-        MyraOrbState.MUTED -> "Microphone Muted"
-        MyraOrbState.SPEAKING -> "Myra is Speaking"
-        MyraOrbState.LISTENING -> "Myra is Listening"
+    val protocolState by com.soltini.app.protocol.AutoTaskProtocolManager.getInstance(androidx.compose.ui.platform.LocalContext.current).protocolState.collectAsState()
+    val isProtocolActive = protocolState?.isRunning == true
+
+    val statusTitle = when {
+        isProtocolActive -> protocolState?.name ?: "Protocol Running"
+        orbState == MyraOrbState.PAUSED -> "Session Paused"
+        orbState == MyraOrbState.CONNECTING -> "Connecting…"
+        orbState == MyraOrbState.OFF -> "Myra is OFF"
+        orbState == MyraOrbState.MUTED -> "Microphone Muted"
+        orbState == MyraOrbState.SPEAKING -> "Myra is Speaking"
+        else -> "Myra is Listening"
     }
 
-    val statusSubtitle = when (orbState) {
-        MyraOrbState.PAUSED -> "Accessibility & microphone are safely paused"
-        MyraOrbState.CONNECTING -> "Starting live voice, please wait"
-        MyraOrbState.OFF -> "Tap reconnect in the top bar to start live voice"
-        MyraOrbState.MUTED -> "Tap the mic button below to resume listening"
-        MyraOrbState.SPEAKING -> "Delivering real-time voice response"
-        MyraOrbState.LISTENING -> "Speak naturally or tap a shortcut below"
+    val statusSubtitle = when {
+        isProtocolActive -> "Executing: ${protocolState?.steps?.getOrNull(protocolState?.currentStepIndex ?: 0)?.title ?: "Autonomous goal"}"
+        orbState == MyraOrbState.PAUSED -> "Accessibility & microphone are safely paused"
+        orbState == MyraOrbState.CONNECTING -> "Starting live voice, please wait"
+        orbState == MyraOrbState.OFF -> "Tap reconnect in the top bar to start live voice"
+        orbState == MyraOrbState.MUTED -> "Tap the mic button below to resume listening"
+        orbState == MyraOrbState.SPEAKING -> "Delivering real-time voice response"
+        else -> "Speak naturally or tap an autonomous protocol below"
     }
 
     GlassCard(
@@ -651,10 +666,10 @@ private fun HeroOrbGlassCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 GlassStatusBadge(
-                    text = orbState.chipLabel,
+                    text = if (isProtocolActive) "Protocol Active" else orbState.chipLabel,
                     isActive = true,
-                    activeBg = orbState.colorFor(LocalMyraTokens.current.mode).copy(alpha = 0.14f),
-                    activeContent = orbState.colorFor(LocalMyraTokens.current.mode)
+                    activeBg = if (isProtocolActive) Color(0x2800E5FF) else orbState.colorFor(LocalMyraTokens.current.mode).copy(alpha = 0.14f),
+                    activeContent = if (isProtocolActive) Color(0xFF0284C7) else orbState.colorFor(LocalMyraTokens.current.mode)
                 )
                 if (LocalMyraTokens.current.mode == MyraThemeMode.BLUE_GLASS) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -662,11 +677,11 @@ private fun HeroOrbGlassCard(
                             modifier = Modifier
                                 .size(7.dp)
                                 .clip(CircleShape)
-                                .background(if (isLive) Color(0xFF00E5FF) else Color(0xFF94A3B8))
+                                .background(if (isProtocolActive) Color(0xFF00E5FF) else if (isLive) Color(0xFF00E5FF) else Color(0xFF94A3B8))
                         )
                         Spacer(Modifier.width(5.dp))
                         Text(
-                            text = if (isLive) "J.A.R.V.I.S. HUD" else "STANDBY",
+                            text = if (isProtocolActive) "AUTO-TASK RUNNING" else if (isLive) "J.A.R.V.I.S. HUD" else "STANDBY",
                             color = LocalMyraTokens.current.textSecondary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -698,8 +713,8 @@ private fun HeroOrbGlassCard(
                 Spacer(modifier = Modifier.height(10.dp))
                 androidx.compose.material3.Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0x1800E5FF),
-                    border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.28f)),
+                    color = if (isProtocolActive) Color(0x2800E5FF) else Color(0x1800E5FF),
+                    border = BorderStroke(1.dp, if (isProtocolActive) Color(0xFF00E5FF) else Color(0xFF00E5FF).copy(alpha = 0.28f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -718,7 +733,7 @@ private fun HeroOrbGlassCard(
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "CORE: ${if (isSpeaking) "SYNTHESIZING" else if (isLive) "ACTIVE HUD" else "STANDBY"}",
+                                text = if (isProtocolActive) "PROTOCOL: ${(protocolState?.progressPercent?.times(100))?.toInt() ?: 0}%" else "CORE: ${if (isSpeaking) "SYNTHESIZING" else if (isLive) "ACTIVE HUD" else "STANDBY"}",
                                 color = Color(0xFF0369A1),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -726,7 +741,7 @@ private fun HeroOrbGlassCard(
                             )
                         }
                         Text(
-                            text = "EDITH PROTOCOL v2.4",
+                            text = if (isProtocolActive) protocolState?.name?.take(22) ?: "EDITH PROTOCOL v2.4" else "EDITH PROTOCOL v2.4",
                             color = Color(0xFF1E6FFB),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -737,11 +752,11 @@ private fun HeroOrbGlassCard(
                                 modifier = Modifier
                                     .size(6.dp)
                                     .clip(CircleShape)
-                                    .background(if (isLive) Color(0xFF00F5D4) else Color(0xFF94A3B8))
+                                    .background(if (isProtocolActive) Color(0xFF00E5FF) else if (isLive) Color(0xFF00F5D4) else Color(0xFF94A3B8))
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = if (isLive) "LINKED" else "OFFLINE",
+                                text = if (isProtocolActive) "EXECUTING" else if (isLive) "LINKED" else "OFFLINE",
                                 color = Color(0xFF0369A1),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -825,15 +840,15 @@ private fun HeroOrbGlassCard(
 
 // ── Command Chips Row ──────────────────────────────────────────────────────────
 private val voiceCommands = listOf(
+    "Protocol: Morning Sync start karo",
+    "Protocol: Deep Focus chalao",
+    "YouTube pe lofi beats chalao aur alarm set karo",
+    "WhatsApp pe Rohit ko message bhejo aur camera kholo",
     "Chrome me ye form pura bhar do",
+    "Zomato pe pizza search karke options dikhao",
     "Shopping app khol ke saree dikhao",
-    "Screen pe search bar pe tap karo",
-    "Niche scroll karke aur options dikhao",
-    "WhatsApp pe Rahul ko message bhej do",
-    "Turn on living room light",
-    "Dekho screen pe kya chal raha hai",
-    "Lock the screen",
-    "Open YouTube"
+    "Protocol: System Boost activate karo",
+    "Turn on living room light"
 )
 
 @Composable
