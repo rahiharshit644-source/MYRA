@@ -19,12 +19,12 @@ import android.util.Log
 class SoltiniVoiceInteractionService : VoiceInteractionService() {
 
     companion object {
-        private const val TAG = "SoltiniVIS"
+        private const val TAG = "MyraVIS"
     }
 
     override fun onReady() {
         super.onReady()
-        Log.i(TAG, "VoiceInteractionService ready — Soltini is the active system assistant")
+        Log.i(TAG, "VoiceInteractionService ready — Myra is the active system assistant")
     }
 
     override fun onShutdown() {
@@ -32,3 +32,5 @@ class SoltiniVoiceInteractionService : VoiceInteractionService() {
         Log.i(TAG, "VoiceInteractionService shutdown")
     }
 }
+
+typealias MyraVoiceInteractionService = SoltiniVoiceInteractionService

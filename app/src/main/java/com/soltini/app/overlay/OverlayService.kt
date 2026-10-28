@@ -522,6 +522,51 @@ class OverlayService : Service() {
         hudParams = null
     }
 
+    private var islandCapsuleView: MyraDynamicIslandHudCapsule? = null
+
+    fun showDynamicIsland() {
+        if (islandCapsuleView != null || !::windowManager.isInitialized) return
+        val view = MyraDynamicIslandHudCapsule(this).apply {
+            onMicToggle = { voiceService?.toggleMute() }
+            onVisionTrigger = {
+                val intent = Intent(this@OverlayService, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                }
+                startActivity(intent)
+            }
+            onSecretaryToggle = {
+                com.soltini.app.secretary.MyraVoiceSecretaryEngine.getInstance(this@OverlayService).toggleSecretary()
+            }
+            onDismiss = { hideDynamicIsland() }
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else
+                @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = (18 * resources.displayMetrics.density).toInt()
+        }
+        try {
+            windowManager.addView(view, params)
+            islandCapsuleView = view
+        } catch (e: Exception) {
+            android.util.Log.e("OverlayService", "showDynamicIsland failed: ${e.message}")
+        }
+    }
+
+    fun hideDynamicIsland() {
+        val v = islandCapsuleView ?: return
+        try { windowManager.removeView(v) } catch (_: Exception) {}
+        islandCapsuleView = null
+    }
+
     /**
      * The card is touchable while the agent is waiting / paused / finished, and for 6 s after you open it
      * (enough to hit Pause or Cancel). While the agent is busy it becomes click-through so it can never
@@ -690,6 +735,7 @@ class OverlayService : Service() {
         instance = null
         mainHandler.removeCallbacks(orbProgressTicker)
         hideHud()
+        hideDynamicIsland()
         if (::windowManager.isInitialized && ::overlayView.isInitialized) {
             try { windowManager.removeView(overlayView) } catch (e: Exception) { /* ignore */ }
         }

@@ -350,7 +350,8 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
             toolCallListener = this,
             appSettings = appSettings,
             memory2Engine = memory2Engine,
-            pluginRegistry = pluginRegistry
+            pluginRegistry = pluginRegistry,
+            context = this
         )
 
         // Voice-ID gate. If the speaker model / enrolled profile is missing the gate fails open (never mutes Myra).

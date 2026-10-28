@@ -13,7 +13,7 @@ import com.soltini.app.services.BackgroundVoiceService
  * BootReceiver
  *
  * Listens for BOOT_COMPLETED (and OEM equivalents like QUICKBOOT_POWERON on HTC/OnePlus)
- * and starts the Soltini foreground services automatically after device reboot.
+ * and starts the Myra foreground services automatically after device reboot.
  *
  * START_STICKY only handles app-kill-and-restart within a session. This receiver
  * handles the cold-boot case where the OS has never started our process yet.

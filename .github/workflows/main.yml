@@ -92,12 +92,12 @@ jobs:
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: soltini-debug-apk
+          name: myra-debug-apk
           path: app/build/outputs/apk/debug/*.apk
 
       - name: Upload Release APK
         if: steps.keystore_check.outputs.has_keystore == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: soltini-release-apk
+          name: myra-release-apk
           path: app/build/outputs/apk/release/*.apk

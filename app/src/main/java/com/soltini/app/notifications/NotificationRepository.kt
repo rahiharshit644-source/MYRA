@@ -100,7 +100,7 @@ class NotificationRepository private constructor(private val context: Context) {
     fun processIncomingNotification(sbn: StatusBarNotification) {
         val pkg = sbn.packageName ?: return
 
-        // 1. Never record Soltini's own persistent/service notifications
+        // 1. Never record Myra's own persistent/service notifications
         if (pkg == context.packageName) return
 
         val appName = try {

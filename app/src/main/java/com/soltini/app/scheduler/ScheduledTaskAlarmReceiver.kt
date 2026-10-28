@@ -33,7 +33,7 @@ class ScheduledTaskAlarmReceiver : BroadcastReceiver() {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
-            "Soltini:ScheduledTaskWakeLock:$taskId"
+            "Myra:ScheduledTaskWakeLock:$taskId"
         )
         wakeLock.acquire(60_000L) // 1 minute max
 

@@ -43,7 +43,9 @@
 
 # Services / receivers / accessibility are referenced from the manifest (kept automatically); keep entry points explicitly
 -keep class com.soltini.app.agent.SoltiniAccessibilityService { *; }
+-keep class com.soltini.app.agent.MyraAccessibilityService { *; }
 -keep class com.soltini.app.notifications.SoltiniNotificationListener { *; }
+-keep class com.soltini.app.notifications.MyraNotificationListener { *; }
 
 # Room, WorkManager workers, and anything constructed by reflection
 -keep class * extends androidx.work.ListenableWorker { <init>(...); }

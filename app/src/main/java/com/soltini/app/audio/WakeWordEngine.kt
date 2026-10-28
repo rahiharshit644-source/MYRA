@@ -40,8 +40,8 @@ class WakeWordEngine(
         private const val MIN_SINGLE_WORD_CONF = 0.75
         private const val MIN_PHRASE_CONF = 0.65
 
-        /** Spellings Vosk may produce for the name. All are in the bundled vocabulary. */
-        private val NAME_VARIANTS = listOf("myra", "maira", "meera", "mayra")
+        /** Spellings Vosk may produce for supported wake-words. */
+        private val NAME_VARIANTS = listOf("myra", "maira", "meera", "mayra", "jarvis", "edith", "friday")
         private val PREFIXES = listOf(
             "", "hey ", "hi ", "hello ", "ok ", "okay ", "wake up ", "sun ", "suno "
         )
@@ -197,6 +197,17 @@ class WakeWordEngine(
             }
 
             Log.i(TAG, "Wake word confirmed: '$phrase' (conf=$avgConf)")
+            try {
+                com.soltini.app.audio.JarvisSoundEngine.playArcReactorHum()
+                val vibrator = appContext.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(android.os.VibrationEffect.createOneShot(70, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(70)
+                }
+                com.soltini.app.agent.AgentStatusBus.emit("⚡ Wake Word Acknowledged: \"$phrase\"")
+            } catch (_: Exception) {}
             onWake()
         } catch (e: Exception) {
             Log.e(TAG, "Error checking hypothesis: ${e.message}")

@@ -1,5 +1,6 @@
 package com.soltini.app.network
 
+import android.content.Context
 import android.util.Base64
 import android.util.Log
 import com.soltini.app.BuildConfig
@@ -68,7 +69,8 @@ class GeminiLiveManager(
     private val toolCallListener: ToolCallListener? = null,
     private val appSettings: AppSettings? = null,
     private val memory2Engine: com.soltini.app.memory2.Memory2Engine? = null,
-    private val pluginRegistry: com.soltini.app.plugins.PluginRegistry? = null
+    private val pluginRegistry: com.soltini.app.plugins.PluginRegistry? = null,
+    private val context: Context? = null
 ) {
     private var cachedMemoryBlock: String = ""
 
@@ -470,7 +472,8 @@ TASK EXECUTION & MULTI-TASKING:
 - `observe_screen` (screen vision) sirf tab chalao jab $addr khud bolein ("screen dekho", "ye padho"), ya kaam ko sach me screen ke content ki zarurat ho (jaise coding ka gap samajhna). Apni taraf se baar-baar screen mat dekho.
 """
 
-            val fullSystemInstruction = "$persona$memoryBlock$toolDocs$humanRealismBlock"
+            val graphBlock = context?.let { com.soltini.app.graph.MyraKnowledgeGraphEngine.getInstance(it).buildGraphSummaryPrompt() } ?: ""
+            val fullSystemInstruction = "$persona$memoryBlock$graphBlock$toolDocs$humanRealismBlock"
 
             val setupObj = JSONObject().apply {
                 put("setup", JSONObject().apply {
@@ -681,7 +684,7 @@ TASK EXECUTION & MULTI-TASKING:
 
                                 put(JSONObject().apply {
                                     put("name", "toggle_screen_companion")
-                                    put("description", "Turns the proactive Live Screen Companion on or off so Soltini automatically watches what the user does and gives helpful suggestions.")
+                                    put("description", "Turns the proactive Live Screen Companion on or off so Myra automatically watches what the user does and gives helpful suggestions.")
                                     put("parameters", JSONObject().apply {
                                         put("type", "OBJECT")
                                         put("properties", JSONObject().apply {

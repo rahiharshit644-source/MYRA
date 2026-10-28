@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
 
 /**
- * MemoryManager — high-level facade for Soltini's vector memory system.
+ * MemoryManager — high-level facade for Myra's vector memory system.
  *
  * Responsibilities:
  *   1. saveMemory(text)    — embed via Gemini API, store in SQLite
@@ -99,7 +99,7 @@ class MemoryManager(
     }
 
     /**
-     * Given a completed conversation turn (Soltini's reply text), calls
+     * Given a completed conversation turn (Myra's reply text), calls
      * Gemini Flash to extract precious user-specific facts, then saves each one.
      *
      * This is called after [onTurnComplete] in BackgroundVoiceService.

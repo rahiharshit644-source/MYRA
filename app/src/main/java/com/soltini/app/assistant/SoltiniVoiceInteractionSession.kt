@@ -20,12 +20,12 @@ class SoltiniVoiceInteractionSession(
 ) : VoiceInteractionSession(context) {
 
     companion object {
-        private const val TAG = "SoltiniSession"
+        private const val TAG = "MyraSession"
     }
 
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
-        Log.i(TAG, "Assistant triggered — waking Soltini")
+        Log.i(TAG, "Assistant triggered — waking Myra")
 
         // Wake the screen and start the voice service + overlay
         val voiceIntent = Intent(context, BackgroundVoiceService::class.java)
@@ -33,7 +33,7 @@ class SoltiniVoiceInteractionSession(
 
         OverlayService.start(context)
 
-        // Immediately hide the session UI — Soltini's floating orb IS the UI
+        // Immediately hide the session UI — Myra's floating orb IS the UI
         hide()
     }
 
@@ -42,3 +42,5 @@ class SoltiniVoiceInteractionSession(
         Log.i(TAG, "Session hidden")
     }
 }
+
+typealias MyraVoiceInteractionSession = SoltiniVoiceInteractionSession

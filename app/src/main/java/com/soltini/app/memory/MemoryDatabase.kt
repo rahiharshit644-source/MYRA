@@ -11,7 +11,7 @@ import java.nio.ByteOrder
 /**
  * MemoryDatabase
  *
- * Lightweight SQLite store for Soltini's persistent vector memory.
+ * Lightweight SQLite store for Myra's persistent vector memory.
  *
  * Schema:
  *   id           — auto-increment primary key

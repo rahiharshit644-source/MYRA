@@ -14,7 +14,7 @@ import android.util.Log
 class SoltiniNotificationListener : NotificationListenerService() {
 
     companion object {
-        private const val TAG = "SoltiniNotifListener"
+        private const val TAG = "MyraNotifListener"
 
         @Volatile
         private var instance: SoltiniNotificationListener? = null
@@ -25,7 +25,7 @@ class SoltiniNotificationListener : NotificationListenerService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 try {
                     requestRebind(ComponentName(context, SoltiniNotificationListener::class.java))
-                    Log.i(TAG, "Requested rebind for SoltiniNotificationListener")
+                    Log.i(TAG, "Requested rebind for MyraNotificationListener")
                 } catch (e: Exception) {
                     Log.w(TAG, "Could not requestRebind: ${e.message}")
                 }
@@ -36,7 +36,7 @@ class SoltiniNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         instance = this
-        Log.i(TAG, "SoltiniNotificationListener successfully connected")
+        Log.i(TAG, "MyraNotificationListener successfully connected")
         try {
             val currentActive = activeNotifications
             NotificationRepository.getInstance(applicationContext).syncActiveNotifications(currentActive)
@@ -50,7 +50,7 @@ class SoltiniNotificationListener : NotificationListenerService() {
         if (instance == this) {
             instance = null
         }
-        Log.i(TAG, "SoltiniNotificationListener disconnected")
+        Log.i(TAG, "MyraNotificationListener disconnected")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -60,6 +60,7 @@ class SoltiniNotificationListener : NotificationListenerService() {
             com.soltini.app.telephony.CallNotificationManager.getInstance(applicationContext).onNotificationPosted(sbn)
             NotificationRepository.getInstance(applicationContext).processIncomingNotification(sbn)
             com.soltini.app.messaging.BusyModeManager.getInstance(applicationContext).processIncomingNotification(sbn)
+            com.soltini.app.secretary.MyraVoiceSecretaryEngine.getInstance(applicationContext).onNotificationReceived(sbn)
         } catch (e: Exception) {
             Log.e(TAG, "Error processing incoming notification: ${e.message}", e)
         }
@@ -83,3 +84,5 @@ class SoltiniNotificationListener : NotificationListenerService() {
         }
     }
 }
+
+typealias MyraNotificationListener = SoltiniNotificationListener

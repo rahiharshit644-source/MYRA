@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Accessibility Service configuration for SoltiniAccessibilityService.
+  Accessibility Service configuration for MyraAccessibilityService.
 
   ── Why these event types are static ────────────────────────────────────────
   Previous code modified serviceInfo at runtime to toggle event types between
@@ -9,7 +9,7 @@
   the process crashes or restarts unexpectedly.
 
   FIX: Subscribe to ALL needed events here, statically. Filtering is done
-  inside SoltiniAccessibilityService.onAccessibilityEvent() via the
+  inside MyraAccessibilityService.onAccessibilityEvent() via the
   isToolCallActive @Volatile flag — zero risk to the permission.
 
   ── Event types explanation ──────────────────────────────────────────────────

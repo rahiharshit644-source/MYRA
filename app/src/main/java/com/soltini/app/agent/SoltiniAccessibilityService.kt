@@ -72,7 +72,7 @@ import kotlin.coroutines.resume
 class SoltiniAccessibilityService : AccessibilityService() {
 
     companion object {
-        private const val TAG = "SoltiniA11y"
+        private const val TAG = "MyraA11y"
 
         @SuppressLint("StaticFieldLeak")
         private var instance: SoltiniAccessibilityService? = null
@@ -1140,3 +1140,5 @@ class SoltiniAccessibilityService : AccessibilityService() {
         }
     }
 }
+
+typealias MyraAccessibilityService = SoltiniAccessibilityService

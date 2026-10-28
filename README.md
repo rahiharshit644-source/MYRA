@@ -1,4 +1,4 @@
-# Soltini — Next-Gen Gemini Live Voice Assistant & Autonomous Agent for Android
+# Myra — Next-Gen Gemini Live Voice Assistant & Autonomous Agent for Android
 
 <div align="center">
 
@@ -16,9 +16,9 @@
 
 ## 📖 Overview
 
-**Soltini** is an advanced, always-on AI voice assistant and autonomous agent for Android powered by Google's bidirectional WebSocket streaming model (`gemini-3.1-flash-live-preview`). 
+**Myra** is an advanced, always-on AI voice assistant and autonomous agent for Android powered by Google's bidirectional WebSocket streaming model (`gemini-3.1-flash-live-preview`). 
 
-Unlike traditional turn-based assistants, Soltini provides **true full-duplex conversational voice**, ultra-low latency interruptibility, native screen perception, direct device automation (YouTube, WhatsApp, Instagram Reels, OS-level navigation), an interactive 3D VRM avatar overlay, and localized persistent memory with SQLite/Room.
+Unlike traditional turn-based assistants, Myra provides **true full-duplex conversational voice**, ultra-low latency interruptibility, native screen perception, direct device automation (YouTube, WhatsApp, Instagram Reels, OS-level navigation), an interactive 3D VRM avatar overlay, and localized persistent memory with SQLite/Room.
 
 ---
 
@@ -236,9 +236,9 @@ For full autonomy and seamless background operation, enable the following permis
    - Enables the floating 3D avatar and overlay ring indicator.
 3. **Accessibility Service (`SoltiniAccessibilityService`)**:
    - Enables screen reading, coordinate tapping, typing, scrolling, screen locking, and app automations.
-   - *Android 13+ Sideloaded APKs*: Go to **Settings → Apps → Soltini → Three Dots (top right) → "Allow restricted settings"**, then enable Soltini in **Accessibility**.
+   - *Android 13+ Sideloaded APKs*: Go to **Settings → Apps → Myra → Three Dots (top right) → "Allow restricted settings"**, then enable Myra in **Accessibility**.
 4. **Default Digital Assistant (`ROLE_ASSISTANT`)**:
-   - Set Soltini as your default assistant under **Settings → Apps → Default apps → Digital assistant app** to activate Soltini when holding the Home/Power button.
+   - Set Myra as your default assistant under **Settings → Apps → Default apps → Digital assistant app** to activate Myra when holding the Home/Power button.
 5. **Battery Optimization Whitelist**:
    - Set Battery usage to **"Unrestricted"** so the OS does not kill background voice listening.
 6. **Xiaomi / Redmi / POCO / HyperOS Specifics**:
@@ -252,7 +252,7 @@ For full autonomy and seamless background operation, enable the following permis
 
 The app provides deep customization via the **Settings Screen** or `AppSettings.kt`:
 
-- **AI Voice Persona**: Customize system prompt behaviors (Soltini Default, Minimal Assistant, Technical Pro, Friendly Companion, or Custom).
+- **AI Voice Persona**: Customize system prompt behaviors (Myra Default, Minimal Assistant, Technical Pro, Friendly Companion, or Custom).
 - **Voice Selection**: Choose between official Gemini voices (`Aoede`, `Kore`, `Puck`, `Charon`, `Fenrir`).
 - **VAD Sensitivity**: Adjust Voice Activity Detection thresholds (`Low: 0.020`, `Balanced: 0.010`, `High: 0.005`).
 - **Microphone Gain**: Boost or attenuate input volume (0.5x to 3.0x).
@@ -278,7 +278,7 @@ This project is licensed under a **Source-Available, Personal & Non-Commercial U
 
 ```
 Source-available software — Personal & Educational Use Only
-Copyright (c) 2024-2026 Soltini App Contributors. All rights reserved.
+Copyright (c) 2024-2026 Myra App Contributors. All rights reserved.
 
 This project is source-available for personal, educational, and research evaluation only.
 Commercial use, redistribution, sublicensing, and publication of the source code or 

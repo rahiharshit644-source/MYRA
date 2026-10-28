@@ -494,6 +494,114 @@ private fun ProtocolPresetsLauncher(
             }
         }
 
+        // Tactical Autonomy Features Row: Voice Secretary | Graph-RAG | Multi-Wake Word
+        val secretaryEngine = remember { com.soltini.app.secretary.MyraVoiceSecretaryEngine.getInstance(context) }
+        val secretaryState by secretaryEngine.secretaryState.collectAsState()
+        val graphEngine = remember { com.soltini.app.graph.MyraKnowledgeGraphEngine.getInstance(context) }
+        val graphNodeCount by graphEngine.nodeCount.collectAsState()
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // 1. WhatsApp & Call Voice Secretary
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (secretaryState.isEnabled) Color(0x2800F5D4) else Color(0x1000E5FF),
+                border = BorderStroke(0.8.dp, if (secretaryState.isEnabled) Color(0xFF00F5D4) else Color(0xFF00E5FF).copy(alpha = 0.25f)),
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    secretaryEngine.toggleSecretary()
+                }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "Voice Secretary",
+                        tint = if (secretaryState.isEnabled) Color(0xFF00F5D4) else Color(0xFF94A3B8),
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = if (secretaryState.isEnabled) "SECRETARY: ON" else "SECRETARY: OFF",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (secretaryState.isEnabled) Color(0xFF059669) else Color(0xFF94A3B8)
+                    )
+                }
+            }
+
+            // 2. Personal Knowledge Graph (Graph-RAG Matrix)
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Color(0x1800E5FF),
+                border = BorderStroke(0.8.dp, Color(0xFF00E5FF).copy(alpha = 0.35f)),
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    com.soltini.app.audio.JarvisSoundEngine.playTacticalBlip()
+                    com.soltini.app.agent.AgentStatusBus.emit("🧠 Graph-RAG Active: $graphNodeCount Personal Entities Linked")
+                }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = "Graph-RAG",
+                        tint = Color(0xFF00E5FF),
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "GRAPH: $graphNodeCount NODES",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0284C7)
+                    )
+                }
+            }
+
+            // 3. Multi-Wake Word (Myra, Jarvis, Edith, Friday)
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Color(0x1800E5FF),
+                border = BorderStroke(0.8.dp, Color(0xFF00E5FF).copy(alpha = 0.35f)),
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    com.soltini.app.audio.JarvisSoundEngine.playArcReactorHum()
+                    com.soltini.app.agent.AgentStatusBus.emit("⚡ Wake Words: 'Hey Myra' | 'Jarvis' | 'Edith' Active")
+                }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = "Multi-Wake",
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "WAKE: JARVIS/MYRA",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0284C7)
+                    )
+                }
+            }
+        }
+
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 2.dp)
