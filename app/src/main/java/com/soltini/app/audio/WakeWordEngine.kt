@@ -14,7 +14,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.vosk.Recognizer
 import org.vosk.android.RecognitionListener
-import org.vosk.android.SpeechService
 import java.util.Locale
 
 /**
@@ -60,13 +59,13 @@ class WakeWordEngine(
     }
 
     private val appContext = context.applicationContext
-    private var speechService: SpeechService? = null
+    private var dspPipeline: VoskDspAudioPipeline? = null
     private var waitModelJob: Job? = null
     private var restartJob: Job? = null
     @Volatile private var wanted = false
     @Volatile private var startedAt = 0L
 
-    val isListening: Boolean get() = speechService != null
+    val isListening: Boolean get() = dspPipeline != null
 
     /** Begin (or resume) wake-word listening. Safe to call repeatedly. */
     fun start() {
@@ -83,14 +82,14 @@ class WakeWordEngine(
     }
 
     private fun releaseService() {
-        val svc = speechService ?: return
-        speechService = null
-        try { svc.stop() } catch (e: Exception) { Log.w(TAG, "stop failed: ${e.message}") }
-        try { svc.shutdown() } catch (e: Exception) { Log.w(TAG, "shutdown failed: ${e.message}") }
+        val pipe = dspPipeline ?: return
+        dspPipeline = null
+        try { pipe.stop() } catch (e: Exception) { Log.w(TAG, "stop failed: ${e.message}") }
+        try { pipe.shutdown() } catch (e: Exception) { Log.w(TAG, "shutdown failed: ${e.message}") }
     }
 
     private fun startInternal() {
-        if (!wanted || speechService != null) return
+        if (!wanted || dspPipeline != null) return
 
         val model = VoskModelManager.model
         if (model == null) {
@@ -103,7 +102,7 @@ class WakeWordEngine(
             if (waitModelJob?.isActive == true) return
             waitModelJob = scope.launch(Dispatchers.Main) {
                 VoskModelManager.isModelReady.first { it }
-                if (wanted && speechService == null) startInternal()
+                if (wanted && dspPipeline == null) startInternal()
             }
             return
         }
@@ -114,11 +113,12 @@ class WakeWordEngine(
                 put("[unk]")
             }.toString()
             val recognizer = Recognizer(model, SAMPLE_RATE, grammar).apply { setWords(true) }
-            val service = SpeechService(recognizer, SAMPLE_RATE)
+            // DSP layer with High-Pass (90Hz) & Low-Pass (3800Hz) filtering before Vosk model
+            val pipeline = VoskDspAudioPipeline(recognizer, SAMPLE_RATE)
             startedAt = System.currentTimeMillis()
-            service.startListening(listener)
-            speechService = service
-            Log.i(TAG, "Wake-word listening active (${PHRASES.size} phrases)")
+            pipeline.startListening(listener)
+            dspPipeline = pipeline
+            Log.i(TAG, "Wake-word listening active with DSP Low-Pass & High-Pass filtering (${PHRASES.size} phrases)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start wake-word listening: ${e.message}", e)
             releaseService()
@@ -131,7 +131,7 @@ class WakeWordEngine(
         restartJob?.cancel()
         restartJob = scope.launch(Dispatchers.Main) {
             delay(delayMs)
-            if (wanted && speechService == null) startInternal()
+            if (wanted && dspPipeline == null) startInternal()
         }
     }
 

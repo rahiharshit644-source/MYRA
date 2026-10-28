@@ -39,6 +39,9 @@ import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
@@ -390,6 +393,104 @@ private fun ProtocolPresetsLauncher(
                         )
                     }
                 }
+
+                Spacer(Modifier.width(6.dp))
+
+                // Acoustic Noise Shield (RNNoise/DeepFilterNet DSP speech enhancer)
+                val noiseTelemetry by com.soltini.app.audio.JarvisDeepNoiseSuppressor.telemetry.collectAsState()
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = when (noiseTelemetry.mode) {
+                        com.soltini.app.audio.NoiseSuppressionMode.EXTREME_NOISE -> Color(0x2800F5D4)
+                        com.soltini.app.audio.NoiseSuppressionMode.BALANCED -> Color(0x1800E5FF)
+                        com.soltini.app.audio.NoiseSuppressionMode.OFF -> Color(0x1094A3B8)
+                    },
+                    border = BorderStroke(
+                        0.8.dp,
+                        when (noiseTelemetry.mode) {
+                            com.soltini.app.audio.NoiseSuppressionMode.EXTREME_NOISE -> Color(0xFF00F5D4)
+                            com.soltini.app.audio.NoiseSuppressionMode.BALANCED -> Color(0xFF00E5FF).copy(alpha = 0.35f)
+                            com.soltini.app.audio.NoiseSuppressionMode.OFF -> Color(0xFF64748B).copy(alpha = 0.3f)
+                        }
+                    ),
+                    onClick = {
+                        val nextMode = com.soltini.app.audio.JarvisDeepNoiseSuppressor.cycleMode()
+                        if (nextMode != com.soltini.app.audio.NoiseSuppressionMode.OFF) {
+                            com.soltini.app.audio.JarvisSoundEngine.playTacticalBlip()
+                        }
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = "Noise Shield",
+                            tint = when (noiseTelemetry.mode) {
+                                com.soltini.app.audio.NoiseSuppressionMode.EXTREME_NOISE -> Color(0xFF00F5D4)
+                                com.soltini.app.audio.NoiseSuppressionMode.BALANCED -> Color(0xFF00E5FF)
+                                com.soltini.app.audio.NoiseSuppressionMode.OFF -> Color(0xFF94A3B8)
+                            },
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = when (noiseTelemetry.mode) {
+                                com.soltini.app.audio.NoiseSuppressionMode.EXTREME_NOISE -> "NOISE SHIELD"
+                                com.soltini.app.audio.NoiseSuppressionMode.BALANCED -> "SHIELD BAL"
+                                com.soltini.app.audio.NoiseSuppressionMode.OFF -> "SHIELD OFF"
+                            },
+                            color = when (noiseTelemetry.mode) {
+                                com.soltini.app.audio.NoiseSuppressionMode.EXTREME_NOISE -> Color(0xFF059669)
+                                com.soltini.app.audio.NoiseSuppressionMode.BALANCED -> Color(0xFF0284C7)
+                                com.soltini.app.audio.NoiseSuppressionMode.OFF -> Color(0xFF94A3B8)
+                            },
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // Voice Persona Switcher: JARVIS (British Stark) | EDITH (Tactical) | MYRA (Hinglish)
+        val personaEngine = remember { com.soltini.app.audio.JarvisPersonaVoiceEngine.getInstance(context) }
+        val activePersona by personaEngine.activePersona.collectAsState()
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            com.soltini.app.audio.VoicePersona.values().forEach { persona ->
+                val isSelected = persona == activePersona
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) Color(0x2800E5FF) else Color(0x1000E5FF),
+                    border = BorderStroke(
+                        0.8.dp,
+                        if (isSelected) Color(0xFF00E5FF) else Color(0xFF00E5FF).copy(alpha = 0.2f)
+                    ),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        personaEngine.switchPersona(persona, vocalizeGreeting = true)
+                    }
+                ) {
+                    Text(
+                        text = when (persona) {
+                            com.soltini.app.audio.VoicePersona.JARVIS_BRITISH -> "🇬🇧 JARVIS"
+                            com.soltini.app.audio.VoicePersona.EDITH_TACTICAL -> "🎯 EDITH"
+                            com.soltini.app.audio.VoicePersona.MYRA_HINGLISH -> "🇮🇳 MYRA"
+                        },
+                        fontSize = 10.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) Color(0xFF0284C7) else t.textSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 5.dp)
+                    )
+                }
             }
         }
 
@@ -418,6 +519,9 @@ private fun ProtocolPresetChip(
         "headphones" -> Icons.Default.Headphones
         "shield", "shield_lock" -> Icons.Default.Security
         "radar" -> Icons.Default.GraphicEq
+        "shopping_cart" -> Icons.Default.ShoppingCart
+        "visibility" -> Icons.Default.Visibility
+        "home" -> Icons.Default.Home
         else -> Icons.Default.Bolt
     }
 
@@ -427,6 +531,9 @@ private fun ProtocolPresetChip(
         "privacy_shield" -> Brush.linearGradient(listOf(Color(0xFF00F5D4), Color(0xFF0D9488)))
         "executive_briefing" -> Brush.linearGradient(listOf(Color(0xFF38BDF8), Color(0xFF1E40AF)))
         "sentry_lockdown" -> Brush.linearGradient(listOf(Color(0xFFEF4444), Color(0xFF7F1D1D)))
+        "market_scout" -> Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF047857)))
+        "vision_scan" -> Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFF4C1D95)))
+        "home_radar" -> Brush.linearGradient(listOf(Color(0xFFF97316), Color(0xFFC2410C)))
         else -> Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFEA580C)))
     }
 

@@ -92,6 +92,7 @@ class AudioRecorder(
 
             // Enable hardware echo cancellation and noise suppression if available
             try {
+                JarvisDeepNoiseSuppressor.attachHardwareEffects(audioRecord!!.audioSessionId)
                 if (AcousticEchoCanceler.isAvailable()) {
                     aec = AcousticEchoCanceler.create(audioRecord!!.audioSessionId)
                     aec?.enabled = true
@@ -119,7 +120,9 @@ class AudioRecorder(
                     if (bytesRead > 0) {
                         errorCount = 0
                         val rawChunk = buffer.copyOf(bytesRead)
-                        val chunk = if (micGain != 1.0f) applySoftGain(rawChunk, micGain) else rawChunk
+                        // Advanced Deep Noise Suppression (filters background hum, traffic, market hubbub)
+                        val denoisedChunk = JarvisDeepNoiseSuppressor.processPcmChunk(rawChunk)
+                        val chunk = if (micGain != 1.0f) applySoftGain(denoisedChunk, micGain) else denoisedChunk
                         val amp = calculateAmplitude(chunk)
 
                         if (!isMuted) {
@@ -227,6 +230,7 @@ class AudioRecorder(
             audioRecord?.release()
             aec?.release()
             ns?.release()
+            JarvisDeepNoiseSuppressor.releaseHardwareEffects()
         } catch (e: Exception) {
             AppLogger.e(TAG, "Error stopping AudioRecord: ${e.message}", e)
         }

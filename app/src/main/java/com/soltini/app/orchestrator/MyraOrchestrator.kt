@@ -1383,25 +1383,13 @@ Guidelines:
                 })
             }.toString()
 
-            val req = Request.Builder()
-                .url("$BASE_URL/$PRIMARY_MODEL:generateContent?key=$apiKey")
-                .post(body.toRequestBody("application/json".toMediaType()))
-                .build()
-
-            val resp = httpClient.newCall(req).execute()
-            if (!resp.isSuccessful) {
-                AppLogger.w(TAG, "Gemini structured intent parsing HTTP ${resp.code}")
+            val gateway = com.soltini.app.gateway.JarvisOmniRouteGateway.getInstance(context)
+            val (success, respBody) = gateway.executeGenerateContent(apiKey, body)
+            if (!success || respBody.isNullOrBlank()) {
+                AppLogger.w(TAG, "OmniRoute gateway failed to parse intent: $respBody")
                 return null
             }
-
-            val respBody = resp.body?.string() ?: return null
-            val text = JSONObject(respBody)
-                .optJSONArray("candidates")
-                ?.optJSONObject(0)
-                ?.optJSONObject("content")
-                ?.optJSONArray("parts")
-                ?.optJSONObject(0)
-                ?.optString("text") ?: return null
+            val text = gateway.extractCandidateText(respBody) ?: return null
 
             val clean = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             val json = JSONObject(clean)
@@ -1897,22 +1885,11 @@ Output valid JSON array ONLY, no explanation."""
                 })
             }.toString()
 
-            val req = Request.Builder()
-                .url("$BASE_URL/$PRIMARY_MODEL:generateContent?key=$apiKey")
-                .post(body.toRequestBody("application/json".toMediaType()))
-                .build()
+            val gateway = com.soltini.app.gateway.JarvisOmniRouteGateway.getInstance(context)
+            val (success, respBody) = gateway.executeGenerateContent(apiKey, body)
+            if (!success || respBody.isNullOrBlank()) return emptyList()
 
-            val resp = httpClient.newCall(req).execute()
-            if (!resp.isSuccessful) return emptyList()
-            val respBody = resp.body?.string() ?: return emptyList()
-
-            val text = JSONObject(respBody)
-                .optJSONArray("candidates")
-                ?.optJSONObject(0)
-                ?.optJSONObject("content")
-                ?.optJSONArray("parts")
-                ?.optJSONObject(0)
-                ?.optString("text") ?: return emptyList()
+            val text = gateway.extractCandidateText(respBody) ?: return emptyList()
 
             val clean = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
             val arr = JSONArray(clean)
@@ -2131,24 +2108,12 @@ Respond directly to Boss with genuine human warmth, accuracy, and intelligence."
                 })
             }.toString()
 
-            val req = Request.Builder()
-                .url("$BASE_URL/$PRIMARY_MODEL:generateContent?key=$apiKey")
-                .post(body.toRequestBody("application/json".toMediaType()))
-                .build()
-
-            val resp = httpClient.newCall(req).execute()
-            if (!resp.isSuccessful) {
-                return "Ji Boss, maine aapki baat suni hai."
+            val gateway = com.soltini.app.gateway.JarvisOmniRouteGateway.getInstance(context)
+            val (success, respBody) = gateway.executeGenerateContent(apiKey, body)
+            if (!success || respBody.isNullOrBlank()) {
+                return "Ji Boss, batayein kya karna hai!"
             }
-            val respBody = resp.body?.string() ?: return "Ji Boss!"
-            val text = JSONObject(respBody)
-                .optJSONArray("candidates")
-                ?.optJSONObject(0)
-                ?.optJSONObject("content")
-                ?.optJSONArray("parts")
-                ?.optJSONObject(0)
-                ?.optString("text")
-
+            val text = gateway.extractCandidateText(respBody)
             text?.trim() ?: "Ji Boss, batayein!"
         } catch (e: Exception) {
             "Ji Boss, bataiye kya kaam karna hai!"

@@ -217,6 +217,11 @@ fun VoiceScreen(
                 )
             }
 
+            // OmniRoute AI Gateway & Failover Telemetry
+            item {
+                com.soltini.app.ui.components.OmniRouteGatewayCard()
+            }
+
             // Blue Glass home dashboard: shortcut cards to existing destinations (Classic keeps its own nav)
             if (isBlueGlass) {
                 item {

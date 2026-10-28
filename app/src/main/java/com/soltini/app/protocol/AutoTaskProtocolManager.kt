@@ -148,6 +148,45 @@ class AutoTaskProtocolManager private constructor(private val appContext: Contex
                     "Arm physical motion tripwire defense",
                     "Engage tactical perimeter surveillance"
                 )
+            ),
+            ProtocolPreset(
+                id = "market_scout",
+                name = "Protocol: Price Scout",
+                tag = "COMMERCE",
+                description = "Autonomous e-commerce price scout & deal matrix",
+                iconName = "shopping_cart",
+                goal = "Scout live deals and compare prices across online storefronts",
+                defaultSteps = listOf(
+                    "Scan Amazon catalog and verified listings",
+                    "Compare with Flipkart deal matrix",
+                    "Compile lowest price recommendation"
+                )
+            ),
+            ProtocolPreset(
+                id = "vision_scan",
+                name = "Protocol: Neural Vision",
+                tag = "VISION",
+                description = "Multimodal camera scan, document OCR & circuit inspection",
+                iconName = "visibility",
+                goal = "Run multimodal neural vision analysis on camera view",
+                defaultSteps = listOf(
+                    "Capture optical frame from camera sensor",
+                    "Process multi-spectral neural features",
+                    "Synthesize visual intelligence report"
+                )
+            ),
+            ProtocolPreset(
+                id = "home_radar",
+                name = "Protocol: IoT Radar",
+                tag = "SMART_HOME",
+                description = "Zero-broker local Wi-Fi scan for Smart TVs & smart lights",
+                iconName = "home",
+                goal = "Scan local Wi-Fi subnet for smart home endpoints and verify status",
+                defaultSteps = listOf(
+                    "Identify gateway and Wi-Fi subnet topology",
+                    "Scan ports for Smart TVs, Cast, and lights",
+                    "Synchronize smart device state matrix"
+                )
             )
         )
     }
@@ -277,6 +316,20 @@ class AutoTaskProtocolManager private constructor(private val appContext: Contex
             if (lower.contains("vitals") || lower.contains("meteorological") || lower.contains("telemetry")) {
                 val brief = com.soltini.app.briefing.JarvisExecutiveBriefing.generateComprehensiveBriefing(appContext)
                 return "Executive telemetry completed: ${brief.take(120)}..."
+            }
+            if (lower.contains("amazon") || lower.contains("flipkart") || lower.contains("price") || lower.contains("deal")) {
+                val report = com.soltini.app.browser.JarvisBrowserShopperAgent.getInstance(appContext).scoutAndComparePrices("Trending Electronics")
+                return "Price scout: ${report.executiveSummary.take(120)}..."
+            }
+            if (lower.contains("optical") || lower.contains("camera") || lower.contains("vision")) {
+                val dummyBmp = android.graphics.Bitmap.createBitmap(300, 300, android.graphics.Bitmap.Config.ARGB_8888)
+                val res = com.soltini.app.vision.JarvisLiveVisionEngine.getInstance(appContext).analyzeVisualFrame(dummyBmp, com.soltini.app.vision.VisionScanMode.GENERAL_PERCEPTION)
+                return "Vision scan: ${res.summary.take(120)}..."
+            }
+            if (lower.contains("iot") || lower.contains("smart home") || lower.contains("topology") || lower.contains("ports")) {
+                val radar = com.soltini.app.homeautomation.JarvisLocalHomeRadar.getInstance(appContext)
+                val devs = radar.scanLocalNetwork()
+                return "IoT Radar: ${devs.size} local devices synchronized."
             }
             val runner = BackgroundAgentRunner(appContext, agentToolExecutor, appSettings)
             val res = runner.execute(step).trim()

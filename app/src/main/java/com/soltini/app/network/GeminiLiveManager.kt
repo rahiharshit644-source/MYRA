@@ -1138,6 +1138,105 @@ TASK EXECUTION & MULTI-TASKING:
                                     })
                                 })
 
+                                // scout_and_compare_prices
+                                put(JSONObject().apply {
+                                    put("name", "scout_and_compare_prices")
+                                    put("description", "Scouts and compares live product prices, deals, and ratings across online platforms (Amazon, Flipkart, retail) using the autonomous web shopper agent.")
+                                    put("parameters", JSONObject().apply {
+                                        put("type", "OBJECT")
+                                        put("properties", JSONObject().apply {
+                                            put("query", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "Product name, model, or service to compare prices for.")
+                                            })
+                                        })
+                                        put("required", JSONArray().apply { put("query") })
+                                    })
+                                })
+
+                                // scan_vision_frame
+                                put(JSONObject().apply {
+                                    put("name", "scan_vision_frame")
+                                    put("description", "Analyzes the current camera view or screen capture using multimodal neural vision for documents, circuits, hardware objects, and UI screens.")
+                                    put("parameters", JSONObject().apply {
+                                        put("type", "OBJECT")
+                                        put("properties", JSONObject().apply {
+                                            put("query", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "Question or instruction about what to analyze in the visual frame.")
+                                            })
+                                            put("mode", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "Mode: 'DOCUMENT_ANALYSIS', 'HARDWARE_OBJECT_INSPECTION', 'SCREEN_UI_GROUNDING', or 'GENERAL_PERCEPTION'.")
+                                            })
+                                        })
+                                        put("required", JSONArray().apply { put("query") })
+                                    })
+                                })
+
+                                // switch_voice_persona
+                                put(JSONObject().apply {
+                                    put("name", "switch_voice_persona")
+                                    put("description", "Switches the active voice persona between 'jarvis' (British Stark AI), 'edith' (Tactical HUD AI), and 'myra' (Warm Hinglish AI).")
+                                    put("parameters", JSONObject().apply {
+                                        put("type", "OBJECT")
+                                        put("properties", JSONObject().apply {
+                                            put("persona", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "Persona identifier: 'jarvis', 'edith', or 'myra'.")
+                                            })
+                                        })
+                                        put("required", JSONArray().apply { put("persona") })
+                                    })
+                                })
+
+                                // call_mcp_tool
+                                put(JSONObject().apply {
+                                    put("name", "call_mcp_tool")
+                                    put("description", "Executes an Anthropic Model Context Protocol (MCP) standardized tool.")
+                                    put("parameters", JSONObject().apply {
+                                        put("type", "OBJECT")
+                                        put("properties", JSONObject().apply {
+                                            put("tool_name", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "The MCP tool to call, e.g. 'mcp_device_telemetry', 'mcp_torch_control', 'mcp_market_deals'.")
+                                            })
+                                            put("arguments", JSONObject().apply {
+                                                put("type", "OBJECT")
+                                                put("description", "JSON arguments matching the tool's inputSchema.")
+                                            })
+                                        })
+                                        put("required", JSONArray().apply { put("tool_name") })
+                                    })
+                                })
+
+                                // scan_local_smart_home
+                                put(JSONObject().apply {
+                                    put("name", "scan_local_smart_home")
+                                    put("description", "Scans the local Wi-Fi subnet for connected Smart TVs (Android TV, Samsung, LG), Cast speakers, and smart lamps.")
+                                    put("parameters", JSONObject().apply { put("type", "OBJECT"); put("properties", JSONObject()) })
+                                })
+
+                                // control_smart_home_device
+                                put(JSONObject().apply {
+                                    put("name", "control_smart_home_device")
+                                    put("description", "Controls a local smart home device (power on/off, mute, dim).")
+                                    put("parameters", JSONObject().apply {
+                                        put("type", "OBJECT")
+                                        put("properties", JSONObject().apply {
+                                            put("device", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "Name or type of device: 'tv', 'light', 'speaker'.")
+                                            })
+                                            put("action", JSONObject().apply {
+                                                put("type", "STRING")
+                                                put("description", "Action to perform: 'turn_on', 'turn_off', 'mute', 'dim'.")
+                                            })
+                                        })
+                                        put("required", JSONArray().apply { put("device"); put("action") })
+                                    })
+                                })
+
                                 // trigger_automation
                                 put(JSONObject().apply {
                                     put("name", "trigger_automation")

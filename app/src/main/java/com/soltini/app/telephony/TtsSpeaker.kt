@@ -62,6 +62,19 @@ class TtsSpeaker(private val context: Context) {
         }
     }
 
+    fun applyPersonaConfiguration(locale: Locale, pitch: Float, rate: Float) {
+        val ttsInstance = tts ?: return
+        try {
+            if (ttsInstance.isLanguageAvailable(locale) >= TextToSpeech.LANG_AVAILABLE) {
+                ttsInstance.language = locale
+            }
+            ttsInstance.setPitch(pitch)
+            ttsInstance.setSpeechRate(rate)
+        } catch (e: Exception) {
+            Log.w(TAG, "applyPersonaConfiguration error: ${e.message}")
+        }
+    }
+
     fun speak(text: String, onComplete: (() -> Unit)? = null) {
         if (!isInitialized || tts == null) {
             pendingSpeech = text
