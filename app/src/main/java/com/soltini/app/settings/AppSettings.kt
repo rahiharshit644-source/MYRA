@@ -316,7 +316,33 @@ class AppSettings(context: Context) {
         }
     }
 
+    // ── Voice Notification Announcer Settings ─────────────────────────────────
+
+    /** Master toggle: When false (default), notifications are completely silent. Only speaks when explicitly enabled by user. */
+    var isNotificationAnnouncerEnabled: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATION_ANNOUNCE_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_ANNOUNCE_ENABLED, value).apply()
+
+    /** Announce only when headphones / Bluetooth headset is connected. Defaults to false. */
+    var isAnnounceOnlyHeadphones: Boolean
+        get() = prefs.getBoolean(KEY_ANNOUNCE_ONLY_HEADPHONES, false)
+        set(value) = prefs.edit().putBoolean(KEY_ANNOUNCE_ONLY_HEADPHONES, value).apply()
+
+    /** Announce only WhatsApp messages (ignores background/system clutter). Defaults to true. */
+    var isAnnounceWhatsAppOnly: Boolean
+        get() = prefs.getBoolean(KEY_ANNOUNCE_WHATSAPP_ONLY, true)
+        set(value) = prefs.edit().putBoolean(KEY_ANNOUNCE_WHATSAPP_ONLY, value).apply()
+
+    /** Filter VIP contacts (only announce if sender is marked VIP). Defaults to false. */
+    var isAnnounceVipOnly: Boolean
+        get() = prefs.getBoolean(KEY_ANNOUNCE_VIP_ONLY, false)
+        set(value) = prefs.edit().putBoolean(KEY_ANNOUNCE_VIP_ONLY, value).apply()
+
     companion object {
+        private const val KEY_NOTIFICATION_ANNOUNCE_ENABLED = "notification_announce_enabled"
+        private const val KEY_ANNOUNCE_ONLY_HEADPHONES = "announce_only_headphones"
+        private const val KEY_ANNOUNCE_WHATSAPP_ONLY = "announce_whatsapp_only"
+        private const val KEY_ANNOUNCE_VIP_ONLY = "announce_vip_only"
         private const val KEY_APP_THEME_MODE = "app_theme_mode"
         const val ORB_STYLE_CLASSIC = "classic"
         const val ORB_STYLE_PARTICLE = "particle"

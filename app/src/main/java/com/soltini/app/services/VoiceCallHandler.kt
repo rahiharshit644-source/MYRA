@@ -32,7 +32,10 @@ class VoiceCallHandler(
         callNotificationManager.startListening()
         callNotificationManager.onIncomingCallDetected = { callerName, phoneNumber ->
             Log.i(TAG, "Incoming call detected: $callerName ($phoneNumber)")
-            if (!isSleeping() && geminiLiveManager.connectionState.value == ConnectionState.Live) {
+            val copilot = com.soltini.app.copilot.DrivingCoPilotEngine.getInstance(context)
+            if (copilot.coPilotState.value.isActive) {
+                copilot.handleIncomingCallWhileDriving(callerName, phoneNumber ?: "")
+            } else if (!isSleeping() && geminiLiveManager.connectionState.value == ConnectionState.Live) {
                 geminiLiveManager.sendClientContent(buildIncomingCallPrompt(callerName, phoneNumber))
             } else if (isNetworkOnline()) {
                 pendingCallAnnouncement = callerName to phoneNumber

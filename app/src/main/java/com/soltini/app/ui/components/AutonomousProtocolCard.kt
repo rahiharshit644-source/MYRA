@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
@@ -506,14 +507,14 @@ private fun ProtocolPresetsLauncher(
                 .padding(horizontal = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // 1. WhatsApp & Call Voice Secretary
+            // 1. WhatsApp & Call Voice Announcer (Strict Opt-in with Gemini Voice)
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = if (secretaryState.isEnabled) Color(0x2800F5D4) else Color(0x1000E5FF),
-                border = BorderStroke(0.8.dp, if (secretaryState.isEnabled) Color(0xFF00F5D4) else Color(0xFF00E5FF).copy(alpha = 0.25f)),
+                color = if (secretaryState.isAnnouncerEnabled) Color(0x2800F5D4) else Color(0x1000E5FF),
+                border = BorderStroke(0.8.dp, if (secretaryState.isAnnouncerEnabled) Color(0xFF00F5D4) else Color(0xFF00E5FF).copy(alpha = 0.25f)),
                 modifier = Modifier.weight(1f),
                 onClick = {
-                    secretaryEngine.toggleSecretary()
+                    secretaryEngine.toggleVoiceAnnouncer()
                 }
             ) {
                 Row(
@@ -522,17 +523,17 @@ private fun ProtocolPresetsLauncher(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "Voice Secretary",
-                        tint = if (secretaryState.isEnabled) Color(0xFF00F5D4) else Color(0xFF94A3B8),
+                        imageVector = if (secretaryState.isAnnouncerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                        contentDescription = "Voice Announcer",
+                        tint = if (secretaryState.isAnnouncerEnabled) Color(0xFF00F5D4) else Color(0xFF94A3B8),
                         modifier = Modifier.size(11.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        text = if (secretaryState.isEnabled) "SECRETARY: ON" else "SECRETARY: OFF",
+                        text = if (secretaryState.isAnnouncerEnabled) "NOTIF: GEMINI" else "NOTIF: SILENT",
                         fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (secretaryState.isEnabled) Color(0xFF059669) else Color(0xFF94A3B8)
+                        color = if (secretaryState.isAnnouncerEnabled) Color(0xFF059669) else Color(0xFF94A3B8)
                     )
                 }
             }
@@ -599,6 +600,48 @@ private fun ProtocolPresetsLauncher(
                         color = Color(0xFF0284C7)
                     )
                 }
+            }
+        }
+
+        // 🏍️ Autonomous Co-Pilot Driving Mode Banner
+        val coPilotEngine = remember { com.soltini.app.copilot.DrivingCoPilotEngine.getInstance(context) }
+        val coPilotState by coPilotEngine.coPilotState.collectAsState()
+
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (coPilotState.isActive) Color(0x30F59E0B) else Color(0x1000E5FF),
+            border = BorderStroke(0.8.dp, if (coPilotState.isActive) Color(0xFFF59E0B) else Color(0xFF00E5FF).copy(alpha = 0.25f)),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+            onClick = {
+                coPilotEngine.toggleCoPilot()
+            }
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.DirectionsCar,
+                        contentDescription = "Driving Co-Pilot",
+                        tint = if (coPilotState.isActive) Color(0xFFF59E0B) else Color(0xFF94A3B8),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (coPilotState.isActive) "🏍️ CO-PILOT DRIVING MODE: ACTIVE" else "🏍️ CO-PILOT DRIVING MODE: STANDBY",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (coPilotState.isActive) Color(0xFFD97706) else Color(0xFF94A3B8)
+                    )
+                }
+                Text(
+                    text = if (coPilotState.isActive) "DISENGAGE" else "ENGAGE",
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (coPilotState.isActive) Color(0xFFF59E0B) else Color(0xFF00E5FF)
+                )
             }
         }
 
