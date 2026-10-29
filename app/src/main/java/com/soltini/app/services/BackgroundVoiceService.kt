@@ -120,6 +120,8 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
     private val audioPlayer = AudioPlayer()
 
     private var headsetRouter: HeadsetAudioRouter? = null
+    private var headsetMediaButtonTrigger: com.soltini.app.audio.HeadsetMediaButtonTrigger? = null
+    private var pocketGestureTrigger: com.soltini.app.gestures.PocketGestureTrigger? = null
     var silentTurn = false
 
     private lateinit var audioRecorder: AudioRecorder
@@ -258,6 +260,8 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
         myraOrchestrator = com.soltini.app.orchestrator.MyraOrchestrator.getInstance(this, memory2Engine, pluginRegistry, appSettings)
 
         headsetRouter = HeadsetAudioRouter(this)
+        headsetMediaButtonTrigger = com.soltini.app.audio.HeadsetMediaButtonTrigger(this).also { it.start() }
+        pocketGestureTrigger = com.soltini.app.gestures.PocketGestureTrigger(this).also { it.start() }
         if (appSettings.isWakeWordEnabled) {
             VoskModelManager.init(this, serviceScope)
         }
@@ -1044,6 +1048,8 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
             sleepStandbyManager.destroy()
         } catch (_: Exception) {}
         com.soltini.app.agent.AgentStatusBus.listener = null
+        headsetMediaButtonTrigger?.stop()
+        pocketGestureTrigger?.stop()
         headsetRouter?.stop()
         audioRecorder.stopRecording()
         audioPlayer.stop()

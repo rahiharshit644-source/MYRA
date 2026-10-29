@@ -338,7 +338,27 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_ANNOUNCE_VIP_ONLY, false)
         set(value) = prefs.edit().putBoolean(KEY_ANNOUNCE_VIP_ONLY, value).apply()
 
+    // ── Earphone & Gesture Activation Shortcuts ──────────────────────────────
+
+    /** When true (default), double-clicking or long-pressing earphone / earbud button instantly activates Myra. */
+    var isEarphoneShortcutEnabled: Boolean
+        get() = prefs.getBoolean(KEY_EARPHONE_SHORTCUT_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_EARPHONE_SHORTCUT_ENABLED, value).apply()
+
+    /** When true (default), Myra gives a short tactical voice greeting when earphones are plugged in or Bluetooth earbuds connect. */
+    var isEarphonePlugGreetingEnabled: Boolean
+        get() = prefs.getBoolean(KEY_EARPHONE_PLUG_GREETING_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_EARPHONE_PLUG_GREETING_ENABLED, value).apply()
+
+    /** When true (default), a double quick shake of the phone in pocket or hand activates Myra. */
+    var isShakeToWakeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SHAKE_TO_WAKE_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_SHAKE_TO_WAKE_ENABLED, value).apply()
+
     companion object {
+        private const val KEY_EARPHONE_SHORTCUT_ENABLED = "earphone_shortcut_enabled"
+        private const val KEY_EARPHONE_PLUG_GREETING_ENABLED = "earphone_plug_greeting_enabled"
+        private const val KEY_SHAKE_TO_WAKE_ENABLED = "shake_to_wake_enabled"
         private const val KEY_NOTIFICATION_ANNOUNCE_ENABLED = "notification_announce_enabled"
         private const val KEY_ANNOUNCE_ONLY_HEADPHONES = "announce_only_headphones"
         private const val KEY_ANNOUNCE_WHATSAPP_ONLY = "announce_whatsapp_only"
