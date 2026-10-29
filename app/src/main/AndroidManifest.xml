@@ -192,6 +192,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- Lockscreen & Screen-off Earphone Activation Receiver -->
+        <receiver
+            android:name="com.soltini.app.audio.MyraMediaButtonReceiver"
+            android:exported="true">
+            <intent-filter android:priority="2147483647">
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+                <action android:name="android.intent.action.VOICE_COMMAND" />
+                <action android:name="android.speech.action.VOICE_SEARCH_HANDS_FREE" />
+                <action android:name="android.intent.action.VOICE_ASSIST" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:exported="false"

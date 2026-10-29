@@ -239,7 +239,7 @@ class FormAutomator(private val context: Context) {
                 } catch (e: Exception) {
                     Log.w(TAG, "Tier 1 failed for '${field.label}': ${e.message}")
                 } finally {
-                    targetNode.recycle()
+                    targetNode/* safe no-op */
                 }
             }
         }
@@ -269,7 +269,7 @@ class FormAutomator(private val context: Context) {
                 } catch (e: Exception) {
                     Log.w(TAG, "Tier 2 failed for '${field.label}': ${e.message}")
                 } finally {
-                    targetNode.recycle()
+                    targetNode/* safe no-op */
                 }
             }
         }
@@ -331,7 +331,7 @@ class FormAutomator(private val context: Context) {
                 } catch (e: Exception) {
                     Log.w(TAG, "Error toggling checkable: ${e.message}")
                 } finally {
-                    node.recycle()
+                    node/* safe no-op */
                 }
             }
         }
@@ -363,7 +363,7 @@ class FormAutomator(private val context: Context) {
             val node = findNodeAtBounds(roots, bounds, requireEditable = false)
             if (node != null) {
                 expanded = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                node.recycle()
+                node/* safe no-op */
             }
         }
         if (!expanded) {
@@ -381,7 +381,7 @@ class FormAutomator(private val context: Context) {
                     val optionNode = findNodeContainingText(root, optionText)
                     if (optionNode != null) {
                         val clicked = optionNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        optionNode.recycle()
+                        optionNode/* safe no-op */
                         if (clicked) {
                             optionSelected = true
                             break
@@ -509,7 +509,7 @@ class FormAutomator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = searchNodeByBounds(child, targetBounds, requireEditable)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -527,7 +527,7 @@ class FormAutomator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findNodeContainingText(child, text)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null

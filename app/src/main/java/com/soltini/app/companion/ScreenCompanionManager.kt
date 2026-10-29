@@ -176,7 +176,7 @@ class ScreenCompanionManager private constructor(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             extractNodeContent(child, textBlocks, editableTexts, clickableActions)
-            child.recycle()
+            child/* safe no-op */
         }
     }
 

@@ -71,11 +71,20 @@ class HeadsetMediaButtonTrigger(private val context: Context) {
 
         try {
             if (mediaSession == null) {
+                val buttonReceiverIntent = Intent(Intent.ACTION_MEDIA_BUTTON, null, context, MyraMediaButtonReceiver::class.java)
+                val buttonReceiverPendingIntent = android.app.PendingIntent.getBroadcast(
+                    context,
+                    0,
+                    buttonReceiverIntent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+
                 mediaSession = MediaSession(context, "MyraHeadsetMediaSession").apply {
                     setFlags(
                         MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
                         MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
                     )
+                    setMediaButtonReceiver(buttonReceiverPendingIntent)
                     setPlaybackState(
                         PlaybackState.Builder()
                             .setActions(
@@ -95,7 +104,7 @@ class HeadsetMediaButtonTrigger(private val context: Context) {
                     })
                     isActive = true
                 }
-                Log.i(TAG, "MediaSession active for earphone shortcuts.")
+                Log.i(TAG, "MediaSession active for earphone shortcuts (with lockscreen receiver).")
             }
 
             val filter = IntentFilter().apply {

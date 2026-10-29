@@ -473,7 +473,8 @@ TASK EXECUTION & MULTI-TASKING:
 """
 
             val graphBlock = context?.let { com.soltini.app.graph.MyraKnowledgeGraphEngine.getInstance(it).buildGraphSummaryPrompt() } ?: ""
-            val fullSystemInstruction = "$persona$memoryBlock$graphBlock$toolDocs$humanRealismBlock"
+            val proactiveMindBlock = context?.let { com.soltini.app.cognitive.MyraProactiveMindEngine.getInstance(it).buildProactivePromptBlock() } ?: ""
+            val fullSystemInstruction = "$persona$memoryBlock$graphBlock$proactiveMindBlock$toolDocs$humanRealismBlock"
 
             val setupObj = JSONObject().apply {
                 put("setup", JSONObject().apply {

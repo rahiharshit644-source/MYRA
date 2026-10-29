@@ -118,7 +118,7 @@ class SpotifyAutomator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val c = node.getChild(i) ?: continue
             aggregateLabel(c, depth + 1, sb)
-            try { c.recycle() } catch (_: Exception) {}
+            try { c/* safe no-op */ } catch (_: Exception) {}
         }
     }
 
@@ -143,7 +143,7 @@ class SpotifyAutomator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val c = node.getChild(i) ?: continue
             scan(c, toks, minTop, maxHeight, out, depth + 1)
-            try { c.recycle() } catch (_: Exception) {}
+            try { c/* safe no-op */ } catch (_: Exception) {}
         }
     }
 
@@ -167,7 +167,7 @@ class SpotifyAutomator(private val context: Context) {
             .sortedWith(compareByDescending<Cand> { it.score }.thenBy { it.top })
             .firstOrNull()
         val clicked = if (best != null) svc.clickNode(AccessibilityNodeInfo.obtain(best.node)) else false
-        for (c in cands) { try { c.node.recycle() } catch (_: Exception) {} }
+        for (c in cands) { try { c.node/* safe no-op */ } catch (_: Exception) {} }
         Log.i(TAG, "clickBestResult('$query') -> candidates=${cands.size}, clicked=$clicked")
         return clicked
     }

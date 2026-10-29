@@ -603,6 +603,49 @@ private fun ProtocolPresetsLauncher(
             }
         }
 
+        // 🔮 Proactive Mind Engine Status Card
+        val mindEngine = remember { com.soltini.app.cognitive.MyraProactiveMindEngine.getInstance(context) }
+        val lastMindInsight by mindEngine.lastInsight.collectAsState()
+
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0x18A855F7),
+            border = BorderStroke(0.8.dp, Color(0xFFA855F7).copy(alpha = 0.35f)),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+            onClick = {
+                com.soltini.app.audio.JarvisSoundEngine.playTacticalBlip()
+                com.soltini.app.agent.AgentStatusBus.emit(lastMindInsight ?: "🔮 Proactive Cognitive Engine: Monitoring Intent & Context")
+            }
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "Proactive Mind",
+                        tint = Color(0xFFA855F7),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (lastMindInsight != null) "MIND: ${lastMindInsight!!.take(32)}..." else "🔮 PROACTIVE MIND: HIGH-AGENCY ACTIVE",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFC084FC)
+                    )
+                }
+                Text(
+                    text = "INSIGHTS",
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFA855F7)
+                )
+            }
+        }
+
         // 🏍️ Autonomous Co-Pilot Driving Mode Banner
         val coPilotEngine = remember { com.soltini.app.copilot.DrivingCoPilotEngine.getInstance(context) }
         val coPilotState by coPilotEngine.coPilotState.collectAsState()

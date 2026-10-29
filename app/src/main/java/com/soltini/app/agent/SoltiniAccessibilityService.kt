@@ -192,7 +192,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
                     if (forceStopNode != null) {
                         Log.i(TAG, "Found Force Stop button, clicking it!")
                         forceStopNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        forceStopNode.recycle()
+                        forceStopNode/* safe no-op */
                         // Don't return yet, we might also see the OK button immediately on some UIs
                     }
 
@@ -201,10 +201,10 @@ class SoltiniAccessibilityService : AccessibilityService() {
                     if (okNode != null) {
                         Log.i(TAG, "Found OK confirmation, clicking it!")
                         okNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        okNode.recycle()
+                        okNode/* safe no-op */
                         isAutomatingForceStop = false // Automation complete
                     }
-                    root.recycle()
+                    root/* safe no-op */
                 }
             }
 
@@ -233,8 +233,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
             if (eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED || eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 val node = event.source
                 if (node != null && (node.isEditable || node.isFocused)) {
-                    lastFocusedEditable?.recycle()
-                    lastFocusedEditable = AccessibilityNodeInfo.obtain(node)
+                    lastFocusedEditable = node
                 }
             }
         } catch (t: Throwable) {
@@ -253,11 +252,8 @@ class SoltiniAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         try {
             watchdogHandler.removeCallbacks(watchdogRunnable)
-            // Clear instance BEFORE super so no in-flight tool call fires against
-            // a destroyed service context.
             instance = null
             isToolCallActive = false
-            lastFocusedEditable?.recycle()
             lastFocusedEditable = null
         } catch (_: Throwable) {}
         super.onDestroy()
@@ -383,7 +379,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
         } finally {
             for (root in roots) {
                 try {
-                    root.recycle()
+                    root/* safe no-op */
                 } catch (_: Exception) {}
             }
         }
@@ -446,7 +442,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectNodeText(child, sb, depth + 1)
-            child.recycle()
+            child/* safe no-op */
         }
     }
 
@@ -492,7 +488,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
      */
     private fun clickNodeOrParentOrTap(node: AccessibilityNodeInfo, query: String): Boolean {
         if (node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-            node.recycle()
+            node/* safe no-op */
             Log.i(TAG, "clickByText('$query') -> direct click succeeded")
             return true
         }
@@ -500,9 +496,9 @@ class SoltiniAccessibilityService : AccessibilityService() {
         val parent = findClickableParent(node)
         if (parent != null) {
             val parentClicked = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            parent.recycle()
+            parent/* safe no-op */
             if (parentClicked) {
-                node.recycle()
+                node/* safe no-op */
                 Log.i(TAG, "clickByText('$query') -> parent click succeeded")
                 return true
             }
@@ -510,7 +506,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
 
         val bounds = Rect()
         node.getBoundsInScreen(bounds)
-        node.recycle()
+        node/* safe no-op */
         if (bounds.width() > 0 && bounds.height() > 0) {
             val tapped = tapAt(bounds.centerX().toFloat(), bounds.centerY().toFloat())
             Log.i(TAG, "clickByText('$query') -> physical tap fallback at (${bounds.centerX()}, ${bounds.centerY()}) = $tapped")
@@ -562,7 +558,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findExactNode(child, wanted)
-            try { child.recycle() } catch (_: Exception) {}
+            try { child/* safe no-op */ } catch (_: Exception) {}
             if (found != null) return found
         }
         return null
@@ -592,7 +588,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
             for (id in ids) {
                 try { out.addAll(r.findAccessibilityNodeInfosByViewId(id)) } catch (_: Exception) {}
             }
-            try { r.recycle() } catch (_: Exception) {}
+            try { r/* safe no-op */ } catch (_: Exception) {}
         }
         return out
     }
@@ -603,12 +599,12 @@ class SoltiniAccessibilityService : AccessibilityService() {
     /** Long-presses [node] (ACTION_LONG_CLICK, falling back to a gesture). Recycles [node]. */
     fun longPressNode(node: AccessibilityNodeInfo): Boolean {
         if (node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) {
-            try { node.recycle() } catch (_: Exception) {}
+            try { node/* safe no-op */ } catch (_: Exception) {}
             return true
         }
         val r = Rect()
         node.getBoundsInScreen(r)
-        try { node.recycle() } catch (_: Exception) {}
+        try { node/* safe no-op */ } catch (_: Exception) {}
         return r.width() > 0 && r.height() > 0 && longPressAt(r.centerX().toFloat(), r.centerY().toFloat())
     }
 
@@ -788,13 +784,13 @@ class SoltiniAccessibilityService : AccessibilityService() {
                     if (focused != null) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                             val ok = focused.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
-                            focused.recycle()
+                            focused/* safe no-op */
                             if (ok) {
                                 Log.i(TAG, "pressImeEnter: ACTION_IME_ENTER succeeded on focused input")
                                 return@withRootNodes true
                             }
                         } else {
-                            focused.recycle()
+                            focused/* safe no-op */
                         }
                     }
                 }
@@ -840,13 +836,13 @@ class SoltiniAccessibilityService : AccessibilityService() {
                     val focusedInput = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
                     if (focusedInput != null) {
                         val o = attempt(focusedInput)
-                        focusedInput.recycle()
+                        focusedInput/* safe no-op */
                         if (o != null) { if (o.verified) return@withRootNodes o else if (unverified == null) unverified = o }
                     }
                     val a11yFocused = root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
                     if (a11yFocused != null && (a11yFocused.isEditable || a11yFocused.className?.toString()?.contains("EditText", true) == true)) {
                         val o = attempt(a11yFocused)
-                        a11yFocused.recycle()
+                        a11yFocused/* safe no-op */
                         if (o != null) { if (o.verified) return@withRootNodes o else if (unverified == null) unverified = o }
                     }
                 }
@@ -869,7 +865,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
                     val editable = findFirstEditable(root)
                     if (editable != null) {
                         val o = attempt(editable)
-                        editable.recycle()
+                        editable/* safe no-op */
                         if (o != null) return@withRootNodes o
                     }
                 }
@@ -904,7 +900,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
                 val scrollable = findFirstScrollable(root)
                 if (scrollable != null) {
                     val success = scrollable.performAction(action)
-                    scrollable.recycle()
+                    scrollable/* safe no-op */
                     if (success) {
                         Log.i(TAG, "scroll(forward=$forward) via a11y action -> true")
                         return@withRootNodes true
@@ -967,7 +963,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findNodeByQuery(child, query, requireClickable, excludeEditable, textOnly)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -984,7 +980,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
             for (root in roots) {
                 val editable = findFirstEditable(root)
                 if (editable != null) {
-                    editable.recycle()
+                    editable/* safe no-op */
                     return@withRootNodes true
                 }
             }
@@ -998,7 +994,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findFirstEditable(child)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -1009,7 +1005,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findFirstScrollable(child)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -1038,7 +1034,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
                                 clicked = tapAt(bounds.centerX().toFloat(), bounds.centerY().toFloat())
                             }
                         }
-                        clickableNode.recycle()
+                        clickableNode/* safe no-op */
                         Log.i(TAG, "clickCallButton(isAnswer=$isAnswer, keyword=$kw) -> $clicked")
                         if (clicked) return@withRootNodes true
                     }
@@ -1053,7 +1049,7 @@ class SoltiniAccessibilityService : AccessibilityService() {
         while (parent != null) {
             if (parent.isClickable) return parent
             val nextParent = parent.parent
-            parent.recycle()
+            parent/* safe no-op */
             parent = nextParent
         }
         return null

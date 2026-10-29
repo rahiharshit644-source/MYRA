@@ -141,7 +141,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             traverseNode(child, elements, allTexts)
-            child.recycle()
+            child/* safe no-op */
         }
     }
 
@@ -202,7 +202,7 @@ class ScreenOperator(private val context: Context) {
                     val clickableList = mutableListOf<AccessibilityNodeInfo>()
                     collectClickableNodes(root, clickableList)
                     val chosen = if (isSecond && clickableList.size > 1) clickableList[1] else clickableList.firstOrNull()
-                    clickableList.forEach { if (it != chosen) it.recycle() }
+                    // clickableList preserved
                     chosen
                 } else {
                     findMatchingNode(root, query)
@@ -222,7 +222,7 @@ class ScreenOperator(private val context: Context) {
                             clicked = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                         }
                         val next = parent.parent
-                        parent.recycle()
+                        parent/* safe no-op */
                         parent = next
                     }
                 }
@@ -237,7 +237,7 @@ class ScreenOperator(private val context: Context) {
                     }
                 }
 
-                matchedNode.recycle()
+                matchedNode/* safe no-op */
 
                 if (clicked) {
                     return@withRootNodes JSONObject().apply {
@@ -260,7 +260,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectClickableNodes(child, list)
-            child.recycle()
+            child/* safe no-op */
         }
     }
 
@@ -334,7 +334,7 @@ class ScreenOperator(private val context: Context) {
                         if (matchingNode != null) {
                             val bounds = Rect()
                             matchingNode.getBoundsInScreen(bounds)
-                            matchingNode.recycle()
+                            matchingNode/* safe no-op */
                             if (bounds.width() > 0 && bounds.height() > 0) {
                                 Log.i(TAG, "Field '$targetField' found as inactive container, tapping at (${bounds.centerX()}, ${bounds.centerY()}) to open cursor/keyboard...")
                                 svc.tapAt(bounds.centerX().toFloat(), bounds.centerY().toFloat())
@@ -423,7 +423,7 @@ class ScreenOperator(private val context: Context) {
                 val fieldNow = if (success) svc.readFieldText(editableNode) else ""
                 val landed = success && (fieldNow == "(hidden)" ||
                     fieldNow.contains(textToType.trim(), ignoreCase = true))
-                editableNode.recycle()
+                editableNode/* safe no-op */
 
                 if (success) {
                     JSONObject().apply {
@@ -439,7 +439,7 @@ class ScreenOperator(private val context: Context) {
                     null
                 }
             } catch (e: Exception) {
-                editableNode.recycle()
+                editableNode/* safe no-op */
                 null
             }
         }
@@ -490,7 +490,7 @@ class ScreenOperator(private val context: Context) {
                     clicked = true
                 }
 
-                node.recycle()
+                node/* safe no-op */
 
                 if (clicked) {
                     return@withRootNodes JSONObject().apply {
@@ -771,7 +771,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findMatchingNode(child, rawQuery)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -804,7 +804,7 @@ class ScreenOperator(private val context: Context) {
             val parent = node.parent
             if (parent != null) {
                 val editableInParent = findFirstEditable(parent)
-                parent.recycle()
+                parent/* safe no-op */
                 if (editableInParent != null) return editableInParent
             }
         }
@@ -812,7 +812,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findEditableByLabel(child, query)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -825,7 +825,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findFirstEditable(child)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -844,7 +844,7 @@ class ScreenOperator(private val context: Context) {
             val parent = node.parent
             if (parent != null) {
                 val checkableInParent = findFirstCheckable(parent)
-                parent.recycle()
+                parent/* safe no-op */
                 if (checkableInParent != null) return checkableInParent
             }
         }
@@ -852,7 +852,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findCheckableByLabel(child, query)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -863,7 +863,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findFirstCheckable(child)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -884,7 +884,7 @@ class ScreenOperator(private val context: Context) {
             val parent = node.parent
             if (parent != null) {
                 val dropInParent = findFirstDropdown(parent)
-                parent.recycle()
+                parent/* safe no-op */
                 if (dropInParent != null) return dropInParent
             }
         }
@@ -892,7 +892,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findDropdownByLabel(child, query)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null
@@ -907,7 +907,7 @@ class ScreenOperator(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findFirstDropdown(child)
-            child.recycle()
+            child/* safe no-op */
             if (found != null) return found
         }
         return null

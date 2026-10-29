@@ -56,7 +56,7 @@ object ScreenObserver {
                 for (i in 0 until n.childCount) {
                     val c = n.getChild(i) ?: continue
                     walk(c, depth + 1)
-                    try { c.recycle() } catch (_: Exception) {}
+                    try { c/* safe no-op */ } catch (_: Exception) {}
                 }
             }
 
@@ -107,7 +107,7 @@ object ScreenObserver {
                 for (i in 0 until n.childCount) {
                     val c = n.getChild(i) ?: continue
                     walk(c, depth + 1)
-                    try { c.recycle() } catch (_: Exception) {}
+                    try { c/* safe no-op */ } catch (_: Exception) {}
                 }
             }
             roots.forEach { walk(it, 0) }
@@ -139,7 +139,7 @@ object ScreenObserver {
                 for (i in 0 until n.childCount) {
                     val c = n.getChild(i) ?: continue
                     walk(c, depth + 1)
-                    try { c.recycle() } catch (_: Exception) {}
+                    try { c/* safe no-op */ } catch (_: Exception) {}
                     if (found) return
                 }
             }

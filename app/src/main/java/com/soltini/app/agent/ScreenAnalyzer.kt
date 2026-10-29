@@ -317,7 +317,7 @@ class ScreenAnalyzer(private val context: Context) {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             traverseForForm(child, labels, inputs, actionButtons, allTexts)
-            child.recycle()
+            child/* safe no-op */
         }
     }
 
