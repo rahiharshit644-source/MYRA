@@ -688,6 +688,53 @@ private fun ProtocolPresetsLauncher(
             }
         }
 
+        // 📍 Real-Time Spatial GPS Location Intelligence Banner
+        val locationEngine = remember { com.soltini.app.location.LocationIntelligenceEngine.getInstance(context) }
+        val locSnapshot by locationEngine.currentLocation.collectAsState()
+
+        Spacer(Modifier.height(6.dp))
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (locSnapshot.isAvailable) Color(0x2010B981) else Color(0x1064748B),
+            border = BorderStroke(0.8.dp, if (locSnapshot.isAvailable) Color(0xFF10B981).copy(alpha = 0.5f) else Color(0xFF64748B).copy(alpha = 0.25f)),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+            onClick = {
+                locationEngine.startLocationTracking()
+            }
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f, fill = false)) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (locSnapshot.isAvailable) Color(0xFF10B981) else Color(0xFF94A3B8))
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (locSnapshot.isAvailable) "📍 GPS LIVE: ${locSnapshot.getReadableSummary()}" else "📍 GPS: ACQUIRING REAL-TIME FIX",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (locSnapshot.isAvailable) Color(0xFF10B981) else Color(0xFF94A3B8),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = if (locSnapshot.isAvailable) "${"%.1f".format(locSnapshot.speedKmh)} km/h" else "STANDBY",
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (locSnapshot.isAvailable) Color(0xFF10B981) else Color(0xFF64748B)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 2.dp)

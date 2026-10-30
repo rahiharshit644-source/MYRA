@@ -58,7 +58,8 @@ class VoiceToolRouter(
             "device_files", "read_photo", "list_apps", "uninstall_app", "contact_alias",
             "whatsapp_confirm_send", "whatsapp_cancel_draft", "whatsapp_delete_message",
             "task_status", "read_otp", "task_reply", "cancel_task",
-            "remember_date", "upcoming_dates", "forget_date", "my_favorites"
+            "remember_date", "upcoming_dates", "forget_date", "my_favorites",
+            "location_intelligence"
         )
     }
 
@@ -888,7 +889,147 @@ class VoiceToolRouter(
             return
         }
 
-        // ─── 21. Direct Device Tools Fallback ────────────────────────────────────
+        // ─── 21. Real-Time Location Intelligence & Navigation Assistant ─────────
+        if (toolName == "location_intelligence") {
+            val action = args.optString("action", "get_current_location").trim()
+            val destination = args.optString("destination", "").trim()
+            val placeName = args.optString("place_name", destination).trim()
+            val category = args.optString("category", "petrol pump").trim()
+            val mode = args.optString("mode", "driving").trim()
+
+            val locationEngine = com.soltini.app.location.LocationIntelligenceEngine.getInstance(context)
+
+            serviceScope.launch(Dispatchers.IO) {
+                val count = activeToolCallCount.incrementAndGet()
+                try {
+                    when (action) {
+                        "get_current_location" -> {
+                            val snapshot = locationEngine.currentLocation.value
+                            if (!snapshot.isAvailable) {
+                                respondOk(callId, toolName) {
+                                    put("status", "pending")
+                                    put("message", "Location signal is currently acquiring. Please ensure GPS is enabled.")
+                                    put("instruction", "Tell Boss in Hindi/Hinglish: 'Boss, GPS signal acquire ho raha hai. Ek baar location toggle check kar lijiye.'")
+                                }
+                            } else {
+                                val speech = "Aap abhi ${snapshot.getReadableSummary()} me hain. Exact coordinates: ${"%.4f".format(snapshot.latitude)}, ${"%.4f".format(snapshot.longitude)}."
+                                respondOk(callId, toolName) {
+                                    put("latitude", snapshot.latitude)
+                                    put("longitude", snapshot.longitude)
+                                    put("address", snapshot.addressText)
+                                    put("summary", snapshot.getReadableSummary())
+                                    put("speech", speech)
+                                    put("instruction", "Speak directly to Boss in Hindi/Hinglish: '$speech'")
+                                }
+                            }
+                        }
+                        "get_distance", "get_route_info" -> {
+                            val dest = destination.ifBlank { placeName }
+                            if (dest.isBlank()) {
+                                respondError(callId, toolName, "Destination cannot be empty.")
+                                return@launch
+                            }
+                            val result = locationEngine.calculateDistanceAndEta(dest)
+                            if (result == null) {
+                                respondOk(callId, toolName) {
+                                    put("status", "not_found")
+                                    put("message", "Could not calculate distance to '$dest'.")
+                                    put("instruction", "Tell Boss in Hindi/Hinglish: 'Boss, $dest ki coordinates verify nahi ho payi. Kya aap city ya landmark specify kar sakte hain?'")
+                                }
+                            } else {
+                                respondOk(callId, toolName) {
+                                    put("destination", result.destination)
+                                    put("road_distance_km", result.estimatedRoadDistanceKm)
+                                    put("driving_time_minutes", result.estimatedDrivingTimeMinutes)
+                                    put("walking_time_minutes", result.estimatedWalkingTimeMinutes)
+                                    put("bike_time_minutes", result.estimatedBikeTimeMinutes)
+                                    put("direction", result.directionCardinal)
+                                    put("speech", result.formattedSpeechText)
+                                    put("instruction", "Speak this directly to Boss in Hindi/Hinglish: '${result.formattedSpeechText}'")
+                                }
+                            }
+                        }
+                        "find_nearby" -> {
+                            val nearbyList = locationEngine.findNearby(category)
+                            if (nearbyList.isEmpty()) {
+                                respondOk(callId, toolName) {
+                                    put("status", "empty")
+                                    put("message", "No nearby $category found.")
+                                    put("instruction", "Tell Boss in Hindi/Hinglish: 'Boss, paas me koi $category locate nahi ho pa raha hai.'")
+                                }
+                            } else {
+                                val firstFew = nearbyList.take(3)
+                                val summaryText = firstFew.joinToString("; ") { "${it.name} (${it.distanceKm} km dur, ${it.address.take(40)})" }
+                                val spoken = "Boss, aapke paas sabse nazdeek ${firstFew.first().name} hai, jo lagbhag ${firstFew.first().distanceKm} km door hai."
+                                respondOk(callId, toolName) {
+                                    put("category", category)
+                                    put("count", nearbyList.size)
+                                    put("summary", summaryText)
+                                    put("speech", spoken)
+                                    put("instruction", "Speak this directly to Boss in Hindi/Hinglish: '$spoken. Kya navigation shuru karoon?'")
+                                }
+                            }
+                        }
+                        "save_favorite_place" -> {
+                            val name = placeName.ifBlank { destination }.ifBlank { "My Favorite Place" }
+                            val saved = locationEngine.saveFavoritePlace(name, category = category)
+                            val spoken = "Ji Boss! '$name' ko aapke favorite places me save kar diya gaya hai (${saved.address.take(50)})."
+                            respondOk(callId, toolName) {
+                                put("place_name", saved.name)
+                                put("address", saved.address)
+                                put("speech", spoken)
+                                put("instruction", "Speak directly to Boss in Hindi/Hinglish: '$spoken'")
+                            }
+                        }
+                        "get_favorite_place" -> {
+                            val target = placeName.ifBlank { destination }
+                            val match = locationEngine.findMatchingFavoritePlace(target)
+                            if (match == null) {
+                                val allFavs = locationEngine.favoritePlaces.value.joinToString(", ") { it.name }
+                                val spoken = "Boss, '$target' naam ka koi favorite place saved nahi hai. Saved places hain: $allFavs."
+                                respondOk(callId, toolName) {
+                                    put("found", false)
+                                    put("saved_places", allFavs)
+                                    put("instruction", "Speak directly to Boss in Hindi/Hinglish: '$spoken'")
+                                }
+                            } else {
+                                val dist = locationEngine.calculateDistanceAndEta(match.name)
+                                val spoken = "Boss, aapka favorite place '${match.name}' (${match.address.take(40)}) ${dist?.estimatedRoadDistanceKm?.let { "lagbhag $it km door hai, drive se ${dist.estimatedDrivingTimeMinutes} minute lagenge" } ?: "saved hai"}."
+                                respondOk(callId, toolName) {
+                                    put("found", true)
+                                    put("name", match.name)
+                                    put("address", match.address)
+                                    put("speech", spoken)
+                                    put("instruction", "Speak directly to Boss in Hindi/Hinglish: '$spoken'")
+                                }
+                            }
+                        }
+                        "navigate_to" -> {
+                            val target = destination.ifBlank { placeName }
+                            val launched = locationEngine.startTurnByTurnNavigation(target, mode)
+                            val spoken = if (launched) "Ji Boss, $target ke liye Google Maps par turn-by-turn navigation shuru kar diya hai." else "Boss, Maps launch karne me issue aaya."
+                            respondOk(callId, toolName) {
+                                put("destination", target)
+                                put("launched", launched)
+                                put("instruction", "Speak directly to Boss in Hindi/Hinglish: '$spoken'")
+                            }
+                        }
+                        else -> {
+                            respondError(callId, toolName, "Unknown location action: $action")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "location_intelligence error: ${e.message}", e)
+                    respondError(callId, toolName, e.message ?: "Location intelligence error")
+                } finally {
+                    val remaining = activeToolCallCount.decrementAndGet()
+                    if (remaining <= 0) activeToolCallCount.set(0)
+                }
+            }
+            return
+        }
+
+        // ─── 22. Direct Device Tools Fallback ────────────────────────────────────
         serviceScope.launch(Dispatchers.IO) {
             Log.i(TAG, "Executing direct tool: $toolName (callId=$callId)")
 

@@ -262,6 +262,12 @@ class BackgroundVoiceService : Service(), GeminiLiveListener, ToolCallListener {
         headsetRouter = HeadsetAudioRouter(this)
         headsetMediaButtonTrigger = com.soltini.app.audio.HeadsetMediaButtonTrigger(this).also { it.start() }
         pocketGestureTrigger = com.soltini.app.gestures.PocketGestureTrigger(this).also { it.start() }
+        // Background GPS Location & Spatial Intelligence Engine
+        try {
+            com.soltini.app.location.LocationIntelligenceEngine.getInstance(this).startLocationTracking()
+        } catch (e: Exception) {
+            Log.w(TAG, "LocationIntelligenceEngine init error: ${e.message}")
+        }
         if (appSettings.isWakeWordEnabled) {
             VoskModelManager.init(this, serviceScope)
         }

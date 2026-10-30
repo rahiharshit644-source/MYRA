@@ -388,6 +388,91 @@ class AgentToolExecutor(private val context: Context) {
             )
             "maps_navigate" -> mapsAutomator.navigate(args.optString("destination", ""), args.optString("mode", "driving"))
             "maps_search" -> mapsAutomator.searchPlace(args.optString("query", ""))
+            "location_intelligence" -> {
+                val action = args.optString("action", "get_current_location")
+                val destination = args.optString("destination", "")
+                val placeName = args.optString("place_name", destination)
+                val category = args.optString("category", "petrol pump")
+                val mode = args.optString("mode", "driving")
+                val locEngine = com.soltini.app.location.LocationIntelligenceEngine.getInstance(context)
+
+                when (action) {
+                    "get_current_location" -> {
+                        val loc = locEngine.currentLocation.value
+                        JSONObject().apply {
+                            put("status", if (loc.isAvailable) "success" else "pending")
+                            put("summary", loc.getReadableSummary())
+                            put("latitude", loc.latitude)
+                            put("longitude", loc.longitude)
+                            put("address", loc.addressText)
+                        }
+                    }
+                    "get_distance", "get_route_info" -> {
+                        val res = blocking { locEngine.calculateDistanceAndEta(destination.ifBlank { placeName }) }
+                        JSONObject().apply {
+                            if (res != null) {
+                                put("status", "success")
+                                put("destination", res.destination)
+                                put("distance_km", res.estimatedRoadDistanceKm)
+                                put("driving_minutes", res.estimatedDrivingTimeMinutes)
+                                put("speech", res.formattedSpeechText)
+                            } else {
+                                put("status", "error")
+                                put("message", "Could not calculate distance")
+                            }
+                        }
+                    }
+                    "find_nearby" -> {
+                        val nearby = blocking { locEngine.findNearby(category) }
+                        JSONObject().apply {
+                            put("status", "success")
+                            put("count", nearby.size)
+                            put("results", JSONArray().apply {
+                                nearby.take(5).forEach {
+                                    put(JSONObject().apply {
+                                        put("name", it.name)
+                                        put("distance_km", it.distanceKm)
+                                        put("address", it.address)
+                                    })
+                                }
+                            })
+                        }
+                    }
+                    "save_favorite_place" -> {
+                        val saved = locEngine.saveFavoritePlace(placeName.ifBlank { destination }, category = category)
+                        JSONObject().apply {
+                            put("status", "success")
+                            put("place", saved.name)
+                            put("address", saved.address)
+                        }
+                    }
+                    "get_favorite_place" -> {
+                        val match = locEngine.findMatchingFavoritePlace(placeName.ifBlank { destination })
+                        JSONObject().apply {
+                            if (match != null) {
+                                put("status", "success")
+                                put("found", true)
+                                put("name", match.name)
+                                put("address", match.address)
+                            } else {
+                                put("status", "success")
+                                put("found", false)
+                            }
+                        }
+                    }
+                    "navigate_to" -> {
+                        val ok = locEngine.startTurnByTurnNavigation(destination.ifBlank { placeName }, mode)
+                        JSONObject().apply {
+                            put("status", if (ok) "success" else "error")
+                            put("destination", destination)
+                        }
+                    }
+                    else -> JSONObject().apply {
+                        put("status", "success")
+                        put("message", "Location action handled")
+                    }
+                }
+            }
             "send_email" -> gmailAutomator.composeEmail(
                 args.optString("to", ""),
                 args.optString("subject", ""),
